@@ -63,25 +63,6 @@ jobs:
         with:
           version: v2.6.1
 
-  benchmark:
-    name: Benchmark
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.25'
-
-      - name: Run benchmarks
-        run: |
-          echo "=== float64 benchmarks ==="
-          go test ./pkg/simd/f64 -bench=. -benchmem -count=1
-          echo ""
-          echo "=== float32 benchmarks ==="
-          go test ./pkg/simd/f32 -bench=. -benchmem -count=1
-
   build:
     name: Build
     runs-on: ubuntu-latest
