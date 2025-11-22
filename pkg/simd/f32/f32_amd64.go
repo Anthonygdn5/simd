@@ -151,10 +151,20 @@ func sum(a []float32) float32 {
 }
 
 func min32(a []float32) float32 {
+	// AVX/AVX-512 requires at least 8/16 elements for initial load
+	// Fall back to Go for small slices to avoid reading beyond bounds
+	if len(a) < 8 {
+		return minGo(a)
+	}
 	return minImpl(a)
 }
 
 func max32(a []float32) float32 {
+	// AVX/AVX-512 requires at least 8/16 elements for initial load
+	// Fall back to Go for small slices to avoid reading beyond bounds
+	if len(a) < 8 {
+		return maxGo(a)
+	}
 	return maxImpl(a)
 }
 

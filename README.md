@@ -205,6 +205,18 @@ Same API as `f64` but for `float32` with wider SIMD:
 
 - **CumulativeSum** is inherently sequential (each element depends on the previous) and uses pure Go on all platforms.
 
+## Known Limitations
+
+### Small Slice Fallback for Min/Max (AMD64)
+
+On AMD64, the `Min` and `Max` functions fall back to pure Go for small slices:
+- **float64**: slices with fewer than 4 elements
+- **float32**: slices with fewer than 8 elements
+
+This is because AVX assembly loads multiple elements at once (4 float64s or 8 float32s), which would cause out-of-bounds memory access on smaller slices.
+
+The Go fallback for small slices is intentional and likely optimal - SIMD setup overhead (register loading, masking, horizontal reduction) would exceed the cost of a simple 2-3 element comparison loop.
+
 ## Architecture Support
 
 | Architecture | Instruction Set | Status            |

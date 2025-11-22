@@ -32,26 +32,26 @@ func minRef(a []float64) float64 {
 	if len(a) == 0 {
 		return 0
 	}
-	min := a[0]
+	result := a[0]
 	for i := 1; i < len(a); i++ {
-		if a[i] < min {
-			min = a[i]
+		if a[i] < result {
+			result = a[i]
 		}
 	}
-	return min
+	return result
 }
 
 func maxRef(a []float64) float64 {
 	if len(a) == 0 {
 		return 0
 	}
-	max := a[0]
+	result := a[0]
 	for i := 1; i < len(a); i++ {
-		if a[i] > max {
-			max = a[i]
+		if a[i] > result {
+			result = a[i]
 		}
 	}
-	return max
+	return result
 }
 
 func addRef(dst, a, b []float64) {
@@ -223,7 +223,7 @@ func makeTestData64(n int) (a, b, c []float64) {
 	a = make([]float64, n)
 	b = make([]float64, n)
 	c = make([]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a[i] = float64(i + 1)
 		b[i] = float64(n - i)
 		c[i] = 0.5
@@ -236,7 +236,7 @@ func makeMixedSigns64(n int) (a, b []float64) {
 	a = make([]float64, n)
 	b = make([]float64, n)
 	half := n / 2
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i < half {
 			a[i] = -float64(half - i)
 			b[i] = float64(half - i)
@@ -661,52 +661,52 @@ func TestEdgeCases_Empty(t *testing.T) {
 		}
 	})
 
-	t.Run("Add_empty", func(t *testing.T) {
+	t.Run("Add_empty", func(_ *testing.T) {
 		Add(dst, empty, empty)
 		// Should not panic, just return
 	})
 
-	t.Run("Sub_empty", func(t *testing.T) {
+	t.Run("Sub_empty", func(_ *testing.T) {
 		Sub(dst, empty, empty)
 	})
 
-	t.Run("Mul_empty", func(t *testing.T) {
+	t.Run("Mul_empty", func(_ *testing.T) {
 		Mul(dst, empty, empty)
 	})
 
-	t.Run("Div_empty", func(t *testing.T) {
+	t.Run("Div_empty", func(_ *testing.T) {
 		Div(dst, empty, empty)
 	})
 
-	t.Run("Scale_empty", func(t *testing.T) {
+	t.Run("Scale_empty", func(_ *testing.T) {
 		Scale(dst, empty, 2.0)
 	})
 
-	t.Run("AddScalar_empty", func(t *testing.T) {
+	t.Run("AddScalar_empty", func(_ *testing.T) {
 		AddScalar(dst, empty, 2.0)
 	})
 
-	t.Run("Abs_empty", func(t *testing.T) {
+	t.Run("Abs_empty", func(_ *testing.T) {
 		Abs(dst, empty)
 	})
 
-	t.Run("Neg_empty", func(t *testing.T) {
+	t.Run("Neg_empty", func(_ *testing.T) {
 		Neg(dst, empty)
 	})
 
-	t.Run("FMA_empty", func(t *testing.T) {
+	t.Run("FMA_empty", func(_ *testing.T) {
 		FMA(dst, empty, empty, empty)
 	})
 
-	t.Run("Clamp_empty", func(t *testing.T) {
+	t.Run("Clamp_empty", func(_ *testing.T) {
 		Clamp(dst, empty, 0, 1)
 	})
 
-	t.Run("Sqrt_empty", func(t *testing.T) {
+	t.Run("Sqrt_empty", func(_ *testing.T) {
 		Sqrt(dst, empty)
 	})
 
-	t.Run("Reciprocal_empty", func(t *testing.T) {
+	t.Run("Reciprocal_empty", func(_ *testing.T) {
 		Reciprocal(dst, empty)
 	})
 
@@ -738,35 +738,35 @@ func TestEdgeCases_Empty(t *testing.T) {
 		}
 	})
 
-	t.Run("Normalize_empty", func(t *testing.T) {
+	t.Run("Normalize_empty", func(_ *testing.T) {
 		Normalize(dst, empty)
 	})
 
-	t.Run("CumulativeSum_empty", func(t *testing.T) {
+	t.Run("CumulativeSum_empty", func(_ *testing.T) {
 		CumulativeSum(dst, empty)
 	})
 
-	t.Run("DotProductBatch_empty_results", func(t *testing.T) {
+	t.Run("DotProductBatch_empty_results", func(_ *testing.T) {
 		DotProductBatch([]float64{}, [][]float64{{1, 2}}, []float64{1, 2})
 	})
 
-	t.Run("DotProductBatch_empty_rows", func(t *testing.T) {
+	t.Run("DotProductBatch_empty_rows", func(_ *testing.T) {
 		DotProductBatch([]float64{1}, [][]float64{}, []float64{1, 2})
 	})
 
-	t.Run("DotProductBatch_empty_vec", func(t *testing.T) {
+	t.Run("DotProductBatch_empty_vec", func(_ *testing.T) {
 		DotProductBatch([]float64{1}, [][]float64{{1, 2}}, []float64{})
 	})
 
-	t.Run("ConvolveValid_empty_kernel", func(t *testing.T) {
+	t.Run("ConvolveValid_empty_kernel", func(_ *testing.T) {
 		ConvolveValid(dst, []float64{1, 2, 3}, []float64{})
 	})
 
-	t.Run("ConvolveValid_signal_smaller_than_kernel", func(t *testing.T) {
+	t.Run("ConvolveValid_signal_smaller_than_kernel", func(_ *testing.T) {
 		ConvolveValid(dst, []float64{1}, []float64{1, 2, 3})
 	})
 
-	t.Run("ConvolveValid_empty_dst", func(t *testing.T) {
+	t.Run("ConvolveValid_empty_dst", func(_ *testing.T) {
 		ConvolveValid([]float64{}, []float64{1, 2, 3, 4, 5}, []float64{1, 2})
 	})
 }
@@ -818,7 +818,7 @@ func TestEdgeCases_MismatchedLengths(t *testing.T) {
 		FMA(dst, a, b, c)
 		// Should use min length of all inputs
 		want := make([]float64, 10)
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			want[i] = a[i]*b[i] + c[i]
 		}
 		if !refSlicesEqual64(dst[:2], want[:2]) {
@@ -871,7 +871,7 @@ func TestDotProductBatch_Ref(t *testing.T) {
 	t.Run("with_empty_row", func(t *testing.T) {
 		rowsWithEmpty := [][]float64{
 			{1, 2, 3, 4},
-			{},  // empty row - should return 0
+			{}, // empty row - should return 0
 			{1, 1, 1, 1},
 		}
 		res := make([]float64, 3)
@@ -895,8 +895,8 @@ func TestDotProductBatch_Ref(t *testing.T) {
 	t.Run("varying_row_lengths", func(t *testing.T) {
 		mixedRows := [][]float64{
 			{1, 2, 3, 4, 5}, // longer than vec
-			{1, 2},         // shorter than vec
-			{1, 2, 3, 4},   // same as vec
+			{1, 2},          // shorter than vec
+			{1, 2, 3, 4},    // same as vec
 		}
 		res := make([]float64, 3)
 		DotProductBatch(res, mixedRows, vec)
@@ -921,8 +921,8 @@ func TestConvolveValid_Ref(t *testing.T) {
 
 	// Compute expected
 	expected := make([]float64, 6)
-	for i := 0; i < 6; i++ {
-		for j := 0; j < len(kernel); j++ {
+	for i := range 6 {
+		for j := range kernel {
 			expected[i] += signal[i+j] * kernel[j]
 		}
 	}

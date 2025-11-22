@@ -173,10 +173,20 @@ func sum(a []float64) float64 {
 }
 
 func min64(a []float64) float64 {
+	// AVX/AVX-512 requires at least 4/8 elements for initial load
+	// Fall back to Go for small slices to avoid reading beyond bounds
+	if len(a) < 4 {
+		return minGo(a)
+	}
 	return minImpl(a)
 }
 
 func max64(a []float64) float64 {
+	// AVX/AVX-512 requires at least 4/8 elements for initial load
+	// Fall back to Go for small slices to avoid reading beyond bounds
+	if len(a) < 4 {
+		return maxGo(a)
+	}
 	return maxImpl(a)
 }
 

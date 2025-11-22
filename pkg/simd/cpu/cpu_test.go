@@ -5,7 +5,7 @@ import (
 )
 
 // TestHasAVX tests the HasAVX function
-func TestHasAVX(t *testing.T) {
+func TestHasAVX(_ *testing.T) {
 	// Just verify it returns a boolean without panicking
 	got := HasAVX()
 	// On ARM64, this should be false
@@ -14,25 +14,25 @@ func TestHasAVX(t *testing.T) {
 }
 
 // TestHasAVX2 tests the HasAVX2 function
-func TestHasAVX2(t *testing.T) {
+func TestHasAVX2(_ *testing.T) {
 	got := HasAVX2()
 	_ = got
 }
 
 // TestHasFMA tests the HasFMA function
-func TestHasFMA(t *testing.T) {
+func TestHasFMA(_ *testing.T) {
 	got := HasFMA()
 	_ = got
 }
 
 // TestHasNEON tests the HasNEON function
-func TestHasNEON(t *testing.T) {
+func TestHasNEON(_ *testing.T) {
 	got := HasNEON()
 	_ = got
 }
 
 // TestHasAVX512VL tests the HasAVX512VL function
-func TestHasAVX512VL(t *testing.T) {
+func TestHasAVX512VL(_ *testing.T) {
 	got := HasAVX512VL()
 	_ = got
 }
@@ -54,7 +54,7 @@ func TestCpuInfo(t *testing.T) {
 }
 
 // TestFeatures tests that Features struct fields are accessible
-func TestFeatures(t *testing.T) {
+func TestFeatures(_ *testing.T) {
 	// Test X86 features struct
 	_ = X86.SSE
 	_ = X86.SSE2
