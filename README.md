@@ -225,7 +225,6 @@ The Go fallback for small slices is intentional and likely optimal - SIMD setup 
 | AMD64        | AVX + FMA       | Full SIMD support |
 | AMD64        | SSE2            | Full SIMD support |
 | ARM64        | NEON/ASIMD      | Full SIMD support |
-| ARM64        | SVE/SVE2        | Planned           |
 | Other        | -               | Pure Go fallback  |
 
 ## Design Principles
