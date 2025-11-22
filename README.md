@@ -30,8 +30,8 @@ package main
 
 import (
     "fmt"
-    "github.com/tphakala/simd/pkg/simd/cpu"
-    "github.com/tphakala/simd/pkg/simd/f64"
+    "github.com/tphakala/simd/cpu"
+    "github.com/tphakala/simd/f64"
 )
 
 func main() {
@@ -70,7 +70,7 @@ func main() {
 ### `cpu` - CPU Feature Detection
 
 ```go
-import "github.com/tphakala/simd/pkg/simd/cpu"
+import "github.com/tphakala/simd/cpu"
 
 fmt.Println(cpu.Info())      // "AMD64 AVX-512", "AMD64 AVX+FMA", "AMD64 SSE2", or "ARM64 NEON"
 fmt.Println(cpu.HasAVX())    // true/false
@@ -134,7 +134,7 @@ SIMD-accelerated complex number operations for FFT-based signal processing:
 These operations are designed for FFT-based convolution pipelines:
 
 ```go
-import "github.com/tphakala/simd/pkg/simd/c128"
+import "github.com/tphakala/simd/c128"
 
 // Frequency-domain multiplication (FFT convolution)
 signalFFT := make([]complex128, n)

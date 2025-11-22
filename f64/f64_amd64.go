@@ -2,7 +2,7 @@
 
 package f64
 
-import "github.com/tphakala/simd/pkg/simd/cpu"
+import "github.com/tphakala/simd/cpu"
 
 // Minimum number of float64 elements required for SIMD operations.
 // AVX processes 4 float64 values per 256-bit register.

@@ -2,7 +2,7 @@
 
 package f32
 
-import "github.com/tphakala/simd/pkg/simd/cpu"
+import "github.com/tphakala/simd/cpu"
 
 // Minimum number of float32 elements required for SIMD operations.
 // AVX processes 8 float32 values per 256-bit register.

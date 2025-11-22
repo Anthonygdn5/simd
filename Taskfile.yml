@@ -74,9 +74,9 @@ tasks:
         	"runtime"
         	"time"
 
-        	"github.com/tphakala/simd/pkg/simd/cpu"
-        	"github.com/tphakala/simd/pkg/simd/f32"
-        	"github.com/tphakala/simd/pkg/simd/f64"
+        	"github.com/tphakala/simd/cpu"
+        	"github.com/tphakala/simd/f32"
+        	"github.com/tphakala/simd/f64"
         )
 
         func main() {
@@ -239,7 +239,7 @@ tasks:
         import (
         	"fmt"
         	"runtime"
-        	"github.com/tphakala/simd/pkg/simd/cpu"
+        	"github.com/tphakala/simd/cpu"
         )
 
         func main() {

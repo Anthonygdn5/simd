@@ -5,7 +5,7 @@ import (
 	"math/cmplx"
 	"testing"
 
-	"github.com/tphakala/simd/pkg/simd/cpu"
+	"github.com/tphakala/simd/cpu"
 )
 
 const epsilon = 1e-10
@@ -192,36 +192,10 @@ func TestMul_Sizes(t *testing.T) {
 }
 
 // Benchmarks
-func BenchmarkMul(b *testing.B) {
-	sizes := []int{64, 256, 1024, 4096}
 
-	for _, size := range sizes {
-		a := make([]complex128, size)
-		bb := make([]complex128, size)
-		dst := make([]complex128, size)
-		for i := range size {
-			a[i] = complex(float64(i+1), float64(i+2))
-			bb[i] = complex(float64(i+3), float64(i+4))
-		}
-
-		b.Run("SIMD_"+string(rune('0'+size/1000))+"k", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				Mul(dst, a, bb)
-			}
-			b.SetBytes(int64(size * 16 * 3)) // 3 slices, 16 bytes per complex128
-		})
-
-		b.Run("Go_"+string(rune('0'+size/1000))+"k", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				mulGo(dst, a, bb)
-			}
-			b.SetBytes(int64(size * 16 * 3))
-		})
-	}
-}
-
-func BenchmarkMulConj(b *testing.B) {
-	size := 1024
+// benchmarkBinaryOp benchmarks a binary complex128 operation (SIMD vs Go).
+func benchmarkBinaryOp(b *testing.B, size int, simdFn, goFn func(dst, a, bb []complex128)) {
+	b.Helper()
 	a := make([]complex128, size)
 	bb := make([]complex128, size)
 	dst := make([]complex128, size)
@@ -231,18 +205,30 @@ func BenchmarkMulConj(b *testing.B) {
 	}
 
 	b.Run("SIMD", func(b *testing.B) {
+		b.SetBytes(int64(size * 16 * 3)) // 3 slices, 16 bytes per complex128
 		for i := 0; i < b.N; i++ {
-			MulConj(dst, a, bb)
+			simdFn(dst, a, bb)
 		}
-		b.SetBytes(int64(size * 16 * 3))
 	})
 
 	b.Run("Go", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			mulConjGo(dst, a, bb)
-		}
 		b.SetBytes(int64(size * 16 * 3))
+		for i := 0; i < b.N; i++ {
+			goFn(dst, a, bb)
+		}
 	})
+}
+
+func BenchmarkMul(b *testing.B) {
+	benchmarkBinaryOp(b, 1024, Mul, mulGo)
+}
+
+func BenchmarkMulConj(b *testing.B) {
+	benchmarkBinaryOp(b, 1024, MulConj, mulConjGo)
+}
+
+func BenchmarkAdd(b *testing.B) {
+	benchmarkBinaryOp(b, 1024, Add, addGo)
 }
 
 func BenchmarkScale(b *testing.B) {
@@ -255,41 +241,16 @@ func BenchmarkScale(b *testing.B) {
 	}
 
 	b.Run("SIMD", func(b *testing.B) {
+		b.SetBytes(int64(size * 16 * 2))
 		for i := 0; i < b.N; i++ {
 			Scale(dst, a, s)
 		}
-		b.SetBytes(int64(size * 16 * 2))
 	})
 
 	b.Run("Go", func(b *testing.B) {
+		b.SetBytes(int64(size * 16 * 2))
 		for i := 0; i < b.N; i++ {
 			scaleGo(dst, a, s)
 		}
-		b.SetBytes(int64(size * 16 * 2))
-	})
-}
-
-func BenchmarkAdd(b *testing.B) {
-	size := 1024
-	a := make([]complex128, size)
-	bb := make([]complex128, size)
-	dst := make([]complex128, size)
-	for i := range size {
-		a[i] = complex(float64(i+1), float64(i+2))
-		bb[i] = complex(float64(i+3), float64(i+4))
-	}
-
-	b.Run("SIMD", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			Add(dst, a, bb)
-		}
-		b.SetBytes(int64(size * 16 * 3))
-	})
-
-	b.Run("Go", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			addGo(dst, a, bb)
-		}
-		b.SetBytes(int64(size * 16 * 3))
 	})
 }

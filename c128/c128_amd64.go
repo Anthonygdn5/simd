@@ -2,7 +2,7 @@
 
 package c128
 
-import "github.com/tphakala/simd/pkg/simd/cpu"
+import "github.com/tphakala/simd/cpu"
 
 // Minimum number of complex128 elements required for SIMD operations.
 // AVX processes 2 complex128 values per 256-bit register (4 float64).

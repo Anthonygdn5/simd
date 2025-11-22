@@ -3,7 +3,7 @@ package f64_test
 import (
 	"fmt"
 
-	"github.com/tphakala/simd/pkg/simd/f64"
+	"github.com/tphakala/simd/f64"
 )
 
 func ExampleDotProduct() {

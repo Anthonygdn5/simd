@@ -3,9 +3,9 @@
 // This module contains subpackages for CPU feature detection and vectorized
 // floating-point operations:
 //
-//   - [github.com/tphakala/simd/pkg/simd/cpu] - CPU feature detection
-//   - [github.com/tphakala/simd/pkg/simd/f64] - float64 SIMD operations
-//   - [github.com/tphakala/simd/pkg/simd/f32] - float32 SIMD operations
+//   - [github.com/tphakala/simd/cpu] - CPU feature detection
+//   - [github.com/tphakala/simd/f64] - float64 SIMD operations
+//   - [github.com/tphakala/simd/f32] - float32 SIMD operations
 //
 // # Architecture Support
 //
@@ -18,8 +18,8 @@
 // # Quick Start
 //
 //	import (
-//	    "github.com/tphakala/simd/pkg/simd/cpu"
-//	    "github.com/tphakala/simd/pkg/simd/f64"
+//	    "github.com/tphakala/simd/cpu"
+//	    "github.com/tphakala/simd/f64"
 //	)
 //
 //	func main() {

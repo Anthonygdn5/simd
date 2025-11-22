@@ -3,7 +3,7 @@ package cpu_test
 import (
 	"fmt"
 
-	"github.com/tphakala/simd/pkg/simd/cpu"
+	"github.com/tphakala/simd/cpu"
 )
 
 func ExampleInfo() {

@@ -3,7 +3,7 @@ package f32_test
 import (
 	"fmt"
 
-	"github.com/tphakala/simd/pkg/simd/f32"
+	"github.com/tphakala/simd/f32"
 )
 
 func ExampleDotProduct() {
