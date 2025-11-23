@@ -3,6 +3,8 @@ package f32
 import (
 	"math"
 	"testing"
+
+	"github.com/tphakala/simd/cpu"
 )
 
 // Tests for Go fallback implementations to ensure they work correctly
@@ -273,4 +275,257 @@ func TestInfConstants(t *testing.T) {
 	if !math.IsInf(float64(negInf), -1) {
 		t.Errorf("negInf should be -Inf")
 	}
+}
+
+func TestAccumulateAdd32Go(t *testing.T) {
+	dst := []float32{1, 2, 3, 4, 5}
+	src := []float32{10, 20, 30, 40, 50}
+	accumulateAdd32Go(dst, src)
+	want := []float32{11, 22, 33, 44, 55}
+	if !refSlicesEqual32(dst, want) {
+		t.Errorf("accumulateAdd32Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestConvolveValidMultiGo(t *testing.T) {
+	signal := []float32{1, 2, 3, 4, 5}
+	kernels := [][]float32{{1, 1}, {1, -1}}
+	kLen := 2
+	n := len(signal) - kLen + 1
+
+	dsts := make([][]float32, 2)
+	dsts[0] = make([]float32, n)
+	dsts[1] = make([]float32, n)
+
+	convolveValidMultiGo(dsts, signal, kernels, n, kLen)
+
+	// kernel[0] = {1, 1}: sum of pairs
+	want0 := []float32{3, 5, 7, 9}
+	// kernel[1] = {1, -1}: difference of pairs
+	want1 := []float32{-1, -1, -1, -1}
+
+	if !refSlicesEqual32(dsts[0], want0) {
+		t.Errorf("convolveValidMultiGo() dsts[0] = %v, want %v", dsts[0], want0)
+	}
+	if !refSlicesEqual32(dsts[1], want1) {
+		t.Errorf("convolveValidMultiGo() dsts[1] = %v, want %v", dsts[1], want1)
+	}
+}
+
+func TestSqrt32Go(t *testing.T) {
+	a := []float32{1, 4, 9, 16}
+	dst := make([]float32, 4)
+	sqrt32Go(dst, a)
+	want := []float32{1, 2, 3, 4}
+	if !refSlicesEqual32(dst, want) {
+		t.Errorf("sqrt32Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestReciprocal32Go(t *testing.T) {
+	a := []float32{1, 2, 4, 5}
+	dst := make([]float32, 4)
+	reciprocal32Go(dst, a)
+	want := []float32{1, 0.5, 0.25, 0.2}
+	if !refSlicesEqual32(dst, want) {
+		t.Errorf("reciprocal32Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestAddScaledGo(t *testing.T) {
+	dst := []float32{1, 2, 3, 4}
+	s := []float32{10, 20, 30, 40}
+	addScaledGo(dst, 0.5, s)
+	want := []float32{6, 12, 18, 24}
+	if !refSlicesEqual32(dst, want) {
+		t.Errorf("addScaledGo() = %v, want %v", dst, want)
+	}
+}
+
+func TestCumulativeSum32Go(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float32
+		want []float32
+	}{
+		{"empty", []float32{}, []float32{}},
+		{"single", []float32{5}, []float32{5}},
+		{"basic", []float32{1, 2, 3, 4}, []float32{1, 3, 6, 10}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := make([]float32, len(tt.a))
+			cumulativeSum32Go(dst, tt.a)
+			if !refSlicesEqual32(dst, tt.want) {
+				t.Errorf("cumulativeSum32Go() = %v, want %v", dst, tt.want)
+			}
+		})
+	}
+}
+
+func TestVariance32Go(t *testing.T) {
+	// Variance of [1, 2, 3, 4, 5] with mean 3:
+	// ((1-3)^2 + (2-3)^2 + (3-3)^2 + (4-3)^2 + (5-3)^2) / 5 = 2
+	a := []float32{1, 2, 3, 4, 5}
+	got := variance32Go(a, 3)
+	want := float32(2.0)
+	if !refAlmostEqual32(got, want) {
+		t.Errorf("variance32Go() = %v, want %v", got, want)
+	}
+}
+
+func TestEuclideanDistance32Go(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b []float32
+		want float32
+	}{
+		{"same", []float32{1, 2, 3}, []float32{1, 2, 3}, 0},
+		{"3d", []float32{0, 0, 0}, []float32{3, 4, 0}, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := euclideanDistance32Go(tt.a, tt.b)
+			if !refAlmostEqual32(got, tt.want) {
+				t.Errorf("euclideanDistance32Go() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInterleave2Go(t *testing.T) {
+	a := []float32{1, 3, 5}
+	b := []float32{2, 4, 6}
+	dst := make([]float32, 6)
+	interleave2Go(dst, a, b)
+	want := []float32{1, 2, 3, 4, 5, 6}
+	if !refSlicesEqual32(dst, want) {
+		t.Errorf("interleave2Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestDeinterleave2Go(t *testing.T) {
+	src := []float32{1, 2, 3, 4, 5, 6}
+	a := make([]float32, 3)
+	b := make([]float32, 3)
+	deinterleave2Go(a, b, src)
+	wantA := []float32{1, 3, 5}
+	wantB := []float32{2, 4, 6}
+	if !refSlicesEqual32(a, wantA) {
+		t.Errorf("deinterleave2Go() a = %v, want %v", a, wantA)
+	}
+	if !refSlicesEqual32(b, wantB) {
+		t.Errorf("deinterleave2Go() b = %v, want %v", b, wantB)
+	}
+}
+
+func TestMinIdxGo(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float32
+		want int
+	}{
+		{"empty", []float32{}, -1},
+		{"single", []float32{5}, 0},
+		{"min_at_start", []float32{1, 2, 3}, 0},
+		{"min_at_end", []float32{3, 2, 1}, 2},
+		{"min_in_middle", []float32{3, 1, 2}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := minIdxGo(tt.a)
+			if got != tt.want {
+				t.Errorf("minIdxGo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaxIdxGo(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float32
+		want int
+	}{
+		{"empty", []float32{}, -1},
+		{"single", []float32{5}, 0},
+		{"max_at_start", []float32{3, 2, 1}, 0},
+		{"max_at_end", []float32{1, 2, 3}, 2},
+		{"max_in_middle", []float32{1, 3, 2}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maxIdxGo(tt.a)
+			if got != tt.want {
+				t.Errorf("maxIdxGo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Tests for init functions to ensure they properly configure function pointers
+
+func TestInitGo(t *testing.T) {
+	savedDotProduct := dotProductImpl
+
+	initGo()
+
+	a := []float32{1, 2, 3, 4}
+	b := []float32{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float32(20)
+	if got != want {
+		t.Errorf("After initGo, dotProduct = %v, want %v", got, want)
+	}
+
+	dotProductImpl = savedDotProduct
+}
+
+func TestInitSSE(t *testing.T) {
+	savedDotProduct := dotProductImpl
+
+	initSSE()
+
+	a := []float32{1, 2, 3, 4}
+	b := []float32{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float32(20)
+	if got != want {
+		t.Errorf("After initSSE, dotProduct = %v, want %v", got, want)
+	}
+
+	dotProductImpl = savedDotProduct
+}
+
+func TestInitAVX512(t *testing.T) {
+	if !cpu.X86.AVX512F || !cpu.X86.AVX512VL {
+		t.Skip("AVX-512 not supported on this CPU")
+	}
+
+	savedDotProduct := dotProductImpl
+	savedMinSIMD := minSIMDElements
+
+	initAVX512()
+
+	a := []float32{1, 2, 3, 4}
+	b := []float32{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float32(20)
+	if got != want {
+		t.Errorf("After initAVX512, dotProduct = %v, want %v", got, want)
+	}
+
+	if minSIMDElements != minAVX512Elements {
+		t.Errorf("initAVX512 didn't set minSIMDElements correctly")
+	}
+
+	dotProductImpl = savedDotProduct
+	minSIMDElements = savedMinSIMD
 }

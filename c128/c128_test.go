@@ -459,3 +459,223 @@ func BenchmarkAbsSq(b *testing.B) {
 func BenchmarkConj(b *testing.B) {
 	benchmarkUnaryConjOp(b, 1024, Conj, conjGo)
 }
+
+// ============================================================================
+// Tests for Go fallback implementations
+// ============================================================================
+
+func TestMulGo(t *testing.T) {
+	a := []complex128{1 + 2i, 3 + 4i}
+	b := []complex128{5 + 6i, 7 + 8i}
+	dst := make([]complex128, 2)
+	mulGo(dst, a, b)
+	for i := range dst {
+		expected := a[i] * b[i]
+		if !complexClose(dst[i], expected) {
+			t.Errorf("mulGo()[%d] = %v, want %v", i, dst[i], expected)
+		}
+	}
+}
+
+func TestMulConjGo(t *testing.T) {
+	a := []complex128{1 + 2i, 3 + 4i}
+	b := []complex128{5 + 6i, 7 + 8i}
+	dst := make([]complex128, 2)
+	mulConjGo(dst, a, b)
+	for i := range dst {
+		expected := a[i] * cmplx.Conj(b[i])
+		if !complexClose(dst[i], expected) {
+			t.Errorf("mulConjGo()[%d] = %v, want %v", i, dst[i], expected)
+		}
+	}
+}
+
+func TestScaleGo(t *testing.T) {
+	a := []complex128{1 + 2i, 3 + 4i}
+	s := complex128(2 + 1i)
+	dst := make([]complex128, 2)
+	scaleGo(dst, a, s)
+	for i := range dst {
+		expected := a[i] * s
+		if !complexClose(dst[i], expected) {
+			t.Errorf("scaleGo()[%d] = %v, want %v", i, dst[i], expected)
+		}
+	}
+}
+
+func TestAddGo(t *testing.T) {
+	a := []complex128{1 + 2i, 3 + 4i}
+	b := []complex128{5 + 6i, 7 + 8i}
+	dst := make([]complex128, 2)
+	addGo(dst, a, b)
+	for i := range dst {
+		expected := a[i] + b[i]
+		if !complexClose(dst[i], expected) {
+			t.Errorf("addGo()[%d] = %v, want %v", i, dst[i], expected)
+		}
+	}
+}
+
+func TestSubGo(t *testing.T) {
+	a := []complex128{5 + 6i, 7 + 8i}
+	b := []complex128{1 + 2i, 3 + 4i}
+	dst := make([]complex128, 2)
+	subGo(dst, a, b)
+	for i := range dst {
+		expected := a[i] - b[i]
+		if !complexClose(dst[i], expected) {
+			t.Errorf("subGo()[%d] = %v, want %v", i, dst[i], expected)
+		}
+	}
+}
+
+func TestAbsGo(t *testing.T) {
+	a := []complex128{3 + 4i, 5 + 12i}
+	dst := make([]float64, 2)
+	absGo(dst, a)
+	want := []float64{5, 13}
+	for i := range dst {
+		if math.Abs(dst[i]-want[i]) > epsilon {
+			t.Errorf("absGo()[%d] = %v, want %v", i, dst[i], want[i])
+		}
+	}
+}
+
+func TestAbsSqGo(t *testing.T) {
+	a := []complex128{3 + 4i, 5 + 12i}
+	dst := make([]float64, 2)
+	absSqGo(dst, a)
+	want := []float64{25, 169}
+	for i := range dst {
+		if math.Abs(dst[i]-want[i]) > epsilon {
+			t.Errorf("absSqGo()[%d] = %v, want %v", i, dst[i], want[i])
+		}
+	}
+}
+
+func TestConjGo(t *testing.T) {
+	a := []complex128{1 + 2i, 3 + 4i}
+	dst := make([]complex128, 2)
+	conjGo(dst, a)
+	want := []complex128{1 - 2i, 3 - 4i}
+	for i := range dst {
+		if !complexClose(dst[i], want[i]) {
+			t.Errorf("conjGo()[%d] = %v, want %v", i, dst[i], want[i])
+		}
+	}
+}
+
+// ============================================================================
+// Tests for empty slice edge cases
+// ============================================================================
+
+func TestMulConj_Empty(_ *testing.T) {
+	var a, b, dst []complex128
+	MulConj(dst, a, b)
+}
+
+func TestScale_Empty(_ *testing.T) {
+	var a, dst []complex128
+	Scale(dst, a, 1+1i)
+}
+
+func TestAdd_Empty(_ *testing.T) {
+	var a, b, dst []complex128
+	Add(dst, a, b)
+}
+
+func TestSub_Empty(_ *testing.T) {
+	var a, b, dst []complex128
+	Sub(dst, a, b)
+}
+
+func TestAbs_Empty(_ *testing.T) {
+	var a []complex128
+	var dst []float64
+	Abs(dst, a)
+}
+
+func TestAbsSq_Empty(_ *testing.T) {
+	var a []complex128
+	var dst []float64
+	AbsSq(dst, a)
+}
+
+func TestMinLen(t *testing.T) {
+	tests := []struct {
+		a, b, c int
+		want    int
+	}{
+		{1, 2, 3, 1},
+		{3, 2, 1, 1},
+		{2, 1, 3, 1},
+		{5, 5, 5, 5},
+		{0, 1, 2, 0},
+	}
+	for _, tt := range tests {
+		got := minLen(tt.a, tt.b, tt.c)
+		if got != tt.want {
+			t.Errorf("minLen(%d, %d, %d) = %d, want %d", tt.a, tt.b, tt.c, got, tt.want)
+		}
+	}
+}
+
+// Tests for init functions to ensure they properly configure function pointers
+
+func TestInitGo(t *testing.T) {
+	savedMul := mulImpl
+
+	initGo()
+
+	a := []complex128{1 + 2i}
+	b := []complex128{3 + 4i}
+	dst := make([]complex128, 1)
+
+	mulImpl(dst, a, b)
+	want := a[0] * b[0]
+	if !complexClose(dst[0], want) {
+		t.Errorf("After initGo, mul = %v, want %v", dst[0], want)
+	}
+
+	mulImpl = savedMul
+}
+
+func TestInitSSE2(t *testing.T) {
+	savedMul := mulImpl
+
+	initSSE2()
+
+	a := []complex128{1 + 2i}
+	b := []complex128{3 + 4i}
+	dst := make([]complex128, 1)
+
+	mulImpl(dst, a, b)
+	want := a[0] * b[0]
+	if !complexClose(dst[0], want) {
+		t.Errorf("After initSSE2, mul = %v, want %v", dst[0], want)
+	}
+
+	mulImpl = savedMul
+}
+
+func TestInitAVX512(t *testing.T) {
+	if !cpu.X86.AVX512F || !cpu.X86.AVX512VL {
+		t.Skip("AVX-512 not supported on this CPU")
+	}
+
+	savedMul := mulImpl
+
+	initAVX512()
+
+	a := []complex128{1 + 2i}
+	b := []complex128{3 + 4i}
+	dst := make([]complex128, 1)
+
+	mulImpl(dst, a, b)
+	want := a[0] * b[0]
+	if !complexClose(dst[0], want) {
+		t.Errorf("After initAVX512, mul = %v, want %v", dst[0], want)
+	}
+
+	mulImpl = savedMul
+}

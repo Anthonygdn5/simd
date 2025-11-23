@@ -3,6 +3,8 @@ package f64
 import (
 	"math"
 	"testing"
+
+	"github.com/tphakala/simd/cpu"
 )
 
 // Tests for Go fallback implementations to ensure they work correctly
@@ -352,4 +354,211 @@ func TestInfConstants(t *testing.T) {
 	if !math.IsInf(negInf, -1) {
 		t.Errorf("negInf should be -Inf")
 	}
+}
+
+func TestVarianceFullGo(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float64
+		want float64
+	}{
+		{"empty", []float64{}, 0},
+		{"single", []float64{5}, 0},
+		{"simple", []float64{1, 2, 3, 4, 5}, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := varianceFullGo(tt.a)
+			if !refAlmostEqual64(got, tt.want) {
+				t.Errorf("varianceFullGo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAccumulateAdd64Go(t *testing.T) {
+	dst := []float64{1, 2, 3, 4, 5}
+	src := []float64{10, 20, 30, 40, 50}
+	accumulateAdd64Go(dst, src)
+	want := []float64{11, 22, 33, 44, 55}
+	if !refSlicesEqual64(dst, want) {
+		t.Errorf("accumulateAdd64Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestConvolveValidMultiGo(t *testing.T) {
+	signal := []float64{1, 2, 3, 4, 5}
+	kernels := [][]float64{{1, 1}, {1, -1}}
+	kLen := 2
+	n := len(signal) - kLen + 1
+
+	dsts := make([][]float64, 2)
+	dsts[0] = make([]float64, n)
+	dsts[1] = make([]float64, n)
+
+	convolveValidMultiGo(dsts, signal, kernels, n, kLen)
+
+	// kernel[0] = {1, 1}: sum of pairs
+	want0 := []float64{3, 5, 7, 9}
+	// kernel[1] = {1, -1}: difference of pairs
+	want1 := []float64{-1, -1, -1, -1}
+
+	if !refSlicesEqual64(dsts[0], want0) {
+		t.Errorf("convolveValidMultiGo() dsts[0] = %v, want %v", dsts[0], want0)
+	}
+	if !refSlicesEqual64(dsts[1], want1) {
+		t.Errorf("convolveValidMultiGo() dsts[1] = %v, want %v", dsts[1], want1)
+	}
+}
+
+func TestAddScaledGo64(t *testing.T) {
+	dst := []float64{1, 2, 3, 4}
+	s := []float64{10, 20, 30, 40}
+	addScaledGo64(dst, 0.5, s)
+	want := []float64{6, 12, 18, 24}
+	if !refSlicesEqual64(dst, want) {
+		t.Errorf("addScaledGo64() = %v, want %v", dst, want)
+	}
+}
+
+func TestInterleave2Go(t *testing.T) {
+	a := []float64{1, 3, 5}
+	b := []float64{2, 4, 6}
+	dst := make([]float64, 6)
+	interleave2Go(dst, a, b)
+	want := []float64{1, 2, 3, 4, 5, 6}
+	if !refSlicesEqual64(dst, want) {
+		t.Errorf("interleave2Go() = %v, want %v", dst, want)
+	}
+}
+
+func TestDeinterleave2Go(t *testing.T) {
+	src := []float64{1, 2, 3, 4, 5, 6}
+	a := make([]float64, 3)
+	b := make([]float64, 3)
+	deinterleave2Go(a, b, src)
+	wantA := []float64{1, 3, 5}
+	wantB := []float64{2, 4, 6}
+	if !refSlicesEqual64(a, wantA) {
+		t.Errorf("deinterleave2Go() a = %v, want %v", a, wantA)
+	}
+	if !refSlicesEqual64(b, wantB) {
+		t.Errorf("deinterleave2Go() b = %v, want %v", b, wantB)
+	}
+}
+
+func TestMinIdxGo64(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float64
+		want int
+	}{
+		{"empty", []float64{}, -1},
+		{"single", []float64{5}, 0},
+		{"min_at_start", []float64{1, 2, 3}, 0},
+		{"min_at_end", []float64{3, 2, 1}, 2},
+		{"min_in_middle", []float64{3, 1, 2}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := minIdxGo64(tt.a)
+			if got != tt.want {
+				t.Errorf("minIdxGo64() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaxIdxGo64(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []float64
+		want int
+	}{
+		{"empty", []float64{}, -1},
+		{"single", []float64{5}, 0},
+		{"max_at_start", []float64{3, 2, 1}, 0},
+		{"max_at_end", []float64{1, 2, 3}, 2},
+		{"max_in_middle", []float64{1, 3, 2}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maxIdxGo64(tt.a)
+			if got != tt.want {
+				t.Errorf("maxIdxGo64() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Tests for init functions to ensure they properly configure function pointers
+// These tests call the init functions directly to cover all CPU paths
+
+func TestInitGo(t *testing.T) {
+	// Save current state
+	savedDotProduct := dotProductImpl
+
+	// Call initGo
+	initGo()
+
+	// Test that operations work with Go implementations
+	a := []float64{1, 2, 3, 4}
+	b := []float64{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float64(20) // 1*4 + 2*3 + 3*2 + 4*1 = 20
+	if got != want {
+		t.Errorf("After initGo, dotProduct = %v, want %v", got, want)
+	}
+
+	// Restore
+	dotProductImpl = savedDotProduct
+}
+
+func TestInitSSE2(t *testing.T) {
+	savedDotProduct := dotProductImpl
+
+	initSSE2()
+
+	a := []float64{1, 2, 3, 4}
+	b := []float64{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float64(20)
+	if got != want {
+		t.Errorf("After initSSE2, dotProduct = %v, want %v", got, want)
+	}
+
+	dotProductImpl = savedDotProduct
+}
+
+func TestInitAVX512(t *testing.T) {
+	if !cpu.X86.AVX512F || !cpu.X86.AVX512VL {
+		t.Skip("AVX-512 not supported on this CPU")
+	}
+
+	savedDotProduct := dotProductImpl
+	savedMinSIMD := minSIMDElements
+
+	initAVX512()
+
+	a := []float64{1, 2, 3, 4}
+	b := []float64{4, 3, 2, 1}
+
+	got := dotProductImpl(a, b)
+	want := float64(20)
+	if got != want {
+		t.Errorf("After initAVX512, dotProduct = %v, want %v", got, want)
+	}
+
+	// Verify minSIMDElements was set
+	if minSIMDElements != minAVX512Elements {
+		t.Errorf("initAVX512 didn't set minSIMDElements correctly")
+	}
+
+	dotProductImpl = savedDotProduct
+	minSIMDElements = savedMinSIMD
 }

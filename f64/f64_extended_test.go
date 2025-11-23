@@ -866,3 +866,98 @@ func BenchmarkConvolveValidMulti_2x1000x64(b *testing.B) {
 		ConvolveValidMulti(dsts, signal, kernels)
 	}
 }
+
+// Edge case tests for empty slices and early returns
+
+func TestInterleave2_Empty(_ *testing.T) {
+	// Should not panic on empty slices
+	var a, b, dst []float64
+	Interleave2(dst, a, b)
+}
+
+func TestDeinterleave2_Empty(_ *testing.T) {
+	// Should not panic on empty slices
+	var a, b, src []float64
+	Deinterleave2(a, b, src)
+}
+
+func TestConvolveValidMulti_Empty(_ *testing.T) {
+	// Should not panic on empty kernels
+	signal := []float64{1, 2, 3, 4, 5}
+	var kernels [][]float64
+	var dsts [][]float64
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_KernelLongerThanSignal(_ *testing.T) {
+	// Should return early when kernel is longer than signal
+	signal := []float64{1, 2}
+	kernels := [][]float64{{1, 2, 3, 4}}
+	dsts := [][]float64{make([]float64, 0)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_MismatchedKernelLengths(t *testing.T) {
+	// Should panic when kernels have different lengths
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expected panic for mismatched kernel lengths")
+		}
+	}()
+	signal := []float64{1, 2, 3, 4, 5}
+	kernels := [][]float64{{1, 1}, {1, 1, 1}} // Different lengths
+	dsts := [][]float64{make([]float64, 4), make([]float64, 3)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestAddScalar_Empty(_ *testing.T) {
+	var a, dst []float64
+	AddScalar(dst, a, 5.0)
+}
+
+func TestReciprocal_Empty(_ *testing.T) {
+	var a, dst []float64
+	Reciprocal(dst, a)
+}
+
+func TestConvolveValidMulti_SmallDst(t *testing.T) {
+	// Test when dst is smaller than validLen
+	signal := []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	kernels := [][]float64{{1, 1}, {1, -1}}
+	// validLen would be 9, but we provide smaller dst
+	dsts := [][]float64{make([]float64, 3), make([]float64, 3)}
+
+	ConvolveValidMulti(dsts, signal, kernels)
+
+	// Should only fill first 3 elements
+	if len(dsts[0]) != 3 {
+		t.Errorf("dst[0] length = %d, want 3", len(dsts[0]))
+	}
+	// Verify values: {1,1} kernel gives sums
+	want0 := []float64{3, 5, 7}
+	for i, v := range want0 {
+		if !almostEqual(dsts[0][i], v, 1e-10) {
+			t.Errorf("dsts[0][%d] = %v, want %v", i, dsts[0][i], v)
+		}
+	}
+}
+
+func TestConvolveValidMulti_ZeroLengthDst(_ *testing.T) {
+	// Test when all dsts have zero length (n becomes 0)
+	signal := []float64{1, 2, 3, 4, 5}
+	kernels := [][]float64{{1, 1}, {1, -1}}
+	dsts := [][]float64{make([]float64, 0), make([]float64, 0)}
+
+	// Should return early without panic
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_FewerDstsThanKernels(_ *testing.T) {
+	// Test when len(dsts) < len(kernels)
+	signal := []float64{1, 2, 3, 4, 5}
+	kernels := [][]float64{{1, 1}, {1, -1}}
+	dsts := [][]float64{make([]float64, 4)} // Only 1 dst for 2 kernels
+
+	// Should return early without panic
+	ConvolveValidMulti(dsts, signal, kernels)
+}

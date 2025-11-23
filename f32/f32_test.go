@@ -1025,3 +1025,126 @@ func BenchmarkEuclideanDistance_1000(b *testing.B) {
 	}
 	_ = result
 }
+
+// Edge case tests for empty slices and early returns
+
+func TestInterleave2_Empty(_ *testing.T) {
+	var a, b, dst []float32
+	Interleave2(dst, a, b)
+}
+
+func TestDeinterleave2_Empty(_ *testing.T) {
+	var a, b, src []float32
+	Deinterleave2(a, b, src)
+}
+
+func TestConvolveValidMulti_Empty(_ *testing.T) {
+	signal := []float32{1, 2, 3, 4, 5}
+	var kernels [][]float32
+	var dsts [][]float32
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_KernelLongerThanSignal(_ *testing.T) {
+	signal := []float32{1, 2}
+	kernels := [][]float32{{1, 2, 3, 4}}
+	dsts := [][]float32{make([]float32, 0)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_MismatchedKernelLengths(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expected panic for mismatched kernel lengths")
+		}
+	}()
+	signal := []float32{1, 2, 3, 4, 5}
+	kernels := [][]float32{{1, 1}, {1, 1, 1}}
+	dsts := [][]float32{make([]float32, 4), make([]float32, 3)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestSqrt_Empty(_ *testing.T) {
+	var a, dst []float32
+	Sqrt(dst, a)
+}
+
+func TestReciprocal_Empty(_ *testing.T) {
+	var a, dst []float32
+	Reciprocal(dst, a)
+}
+
+func TestAddScaled_Empty(_ *testing.T) {
+	var dst, s []float32
+	AddScaled(dst, 2.0, s)
+}
+
+func TestCumulativeSum_Empty(_ *testing.T) {
+	var a, dst []float32
+	CumulativeSum(dst, a)
+}
+
+func TestNormalize_Empty(_ *testing.T) {
+	var a, dst []float32
+	Normalize(dst, a)
+}
+
+func TestMean_Empty(t *testing.T) {
+	var a []float32
+	got := Mean(a)
+	if got != 0 {
+		t.Errorf("Mean(empty) = %v, want 0", got)
+	}
+}
+
+func TestVariance_Empty(t *testing.T) {
+	var a []float32
+	got := Variance(a)
+	if got != 0 {
+		t.Errorf("Variance(empty) = %v, want 0", got)
+	}
+}
+
+func TestVariance_Single(t *testing.T) {
+	a := []float32{5}
+	got := Variance(a)
+	if got != 0 {
+		t.Errorf("Variance(single) = %v, want 0", got)
+	}
+}
+
+func TestConvolveValidMulti_SmallDst(t *testing.T) {
+	// Test when dst is smaller than validLen
+	signal := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	kernels := [][]float32{{1, 1}, {1, -1}}
+	// validLen would be 9, but we provide smaller dst
+	dsts := [][]float32{make([]float32, 3), make([]float32, 3)}
+
+	ConvolveValidMulti(dsts, signal, kernels)
+
+	// Should only fill first 3 elements
+	if len(dsts[0]) != 3 {
+		t.Errorf("dst[0] length = %d, want 3", len(dsts[0]))
+	}
+	// Verify values: {1,1} kernel gives sums
+	want0 := []float32{3, 5, 7}
+	for i, v := range want0 {
+		if dsts[0][i] != v {
+			t.Errorf("dsts[0][%d] = %v, want %v", i, dsts[0][i], v)
+		}
+	}
+}
+
+func TestConvolveValidMulti_ZeroLengthDst(_ *testing.T) {
+	signal := []float32{1, 2, 3, 4, 5}
+	kernels := [][]float32{{1, 1}, {1, -1}}
+	dsts := [][]float32{make([]float32, 0), make([]float32, 0)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
+
+func TestConvolveValidMulti_FewerDstsThanKernels(_ *testing.T) {
+	signal := []float32{1, 2, 3, 4, 5}
+	kernels := [][]float32{{1, 1}, {1, -1}}
+	dsts := [][]float32{make([]float32, 4)}
+	ConvolveValidMulti(dsts, signal, kernels)
+}
