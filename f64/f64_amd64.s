@@ -18,13 +18,58 @@ GLOBL absf64mask<>(SB), RODATA|NOPTR, $64
 // ============================================================================
 
 // func dotProductAVX(a, b []float64) float64
+// Optimized with 4 independent accumulators to hide FMA latency (4 cycles).
+// Processes 16 doubles per iteration for better instruction-level parallelism.
 TEXT ·dotProductAVX(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
     MOVQ b_base+24(FP), DI
 
-    VXORPD Y0, Y0, Y0
+    // Initialize 4 independent accumulators
+    VXORPD Y0, Y0, Y0          // acc0
+    VXORPD Y3, Y3, Y3          // acc1
+    VXORPD Y4, Y4, Y4          // acc2
+    VXORPD Y5, Y5, Y5          // acc3
 
+    // Process 16 elements per iteration (4 vectors × 4 doubles)
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   dot_avx_loop4_check
+
+dot_avx_loop16:
+    // Load and FMA for acc0
+    VMOVUPD (SI), Y1
+    VMOVUPD (DI), Y2
+    VFMADD231PD Y1, Y2, Y0
+
+    // Load and FMA for acc1
+    VMOVUPD 32(SI), Y1
+    VMOVUPD 32(DI), Y2
+    VFMADD231PD Y1, Y2, Y3
+
+    // Load and FMA for acc2
+    VMOVUPD 64(SI), Y1
+    VMOVUPD 64(DI), Y2
+    VFMADD231PD Y1, Y2, Y4
+
+    // Load and FMA for acc3
+    VMOVUPD 96(SI), Y1
+    VMOVUPD 96(DI), Y2
+    VFMADD231PD Y1, Y2, Y5
+
+    ADDQ $128, SI
+    ADDQ $128, DI
+    DECQ AX
+    JNZ  dot_avx_loop16
+
+    // Combine accumulators: Y0 = Y0 + Y3 + Y4 + Y5
+    VADDPD Y3, Y0, Y0
+    VADDPD Y4, Y0, Y0
+    VADDPD Y5, Y0, Y0
+
+dot_avx_loop4_check:
+    // Handle remaining 4-element chunks
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   dot_avx_remainder
@@ -39,10 +84,12 @@ dot_avx_loop4:
     JNZ  dot_avx_loop4
 
 dot_avx_remainder:
+    // Reduce Y0 to scalar
     VEXTRACTF128 $1, Y0, X1
     VADDPD X1, X0, X0
     VHADDPD X0, X0, X0
 
+    // Handle remaining 1-3 elements
     ANDQ $3, CX
     JZ   dot_avx_done
 
@@ -793,15 +840,60 @@ euclid_avx_sqrt:
 // ============================================================================
 
 // func dotProductAVX512(a, b []float64) float64
+// Optimized with 4 independent accumulators to hide FMA latency.
+// Processes 32 doubles per iteration (4 vectors × 8 doubles).
 TEXT ·dotProductAVX512(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
     MOVQ b_base+24(FP), DI
 
-    VXORPD Z0, Z0, Z0
+    // Initialize 4 independent accumulators
+    VXORPD Z0, Z0, Z0          // acc0
+    VXORPD Z3, Z3, Z3          // acc1
+    VXORPD Z4, Z4, Z4          // acc2
+    VXORPD Z5, Z5, Z5          // acc3
 
+    // Process 32 elements per iteration (4 vectors × 8 doubles)
     MOVQ CX, AX
-    SHRQ $3, AX                // len / 8
+    SHRQ $5, AX                // len / 32
+    JZ   dot_512_loop8_check
+
+dot_512_loop32:
+    // Load and FMA for acc0
+    VMOVUPD (SI), Z1
+    VMOVUPD (DI), Z2
+    VFMADD231PD Z1, Z2, Z0
+
+    // Load and FMA for acc1
+    VMOVUPD 64(SI), Z1
+    VMOVUPD 64(DI), Z2
+    VFMADD231PD Z1, Z2, Z3
+
+    // Load and FMA for acc2
+    VMOVUPD 128(SI), Z1
+    VMOVUPD 128(DI), Z2
+    VFMADD231PD Z1, Z2, Z4
+
+    // Load and FMA for acc3
+    VMOVUPD 192(SI), Z1
+    VMOVUPD 192(DI), Z2
+    VFMADD231PD Z1, Z2, Z5
+
+    ADDQ $256, SI
+    ADDQ $256, DI
+    DECQ AX
+    JNZ  dot_512_loop32
+
+    // Combine accumulators: Z0 = Z0 + Z3 + Z4 + Z5
+    VADDPD Z3, Z0, Z0
+    VADDPD Z4, Z0, Z0
+    VADDPD Z5, Z0, Z0
+
+dot_512_loop8_check:
+    // Handle remaining 8-element chunks
+    ANDQ $31, CX
+    MOVQ CX, AX
+    SHRQ $3, AX
     JZ   dot_512_remainder
 
 dot_512_loop8:
