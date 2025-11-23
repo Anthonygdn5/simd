@@ -344,19 +344,45 @@ addsc_avx_done:
     RET
 
 // func sumAVX(a []float64) float64
+// Optimized with 4 independent accumulators to hide ADD latency (4 cycles).
 TEXT ·sumAVX(SB), NOSPLIT, $0-32
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
 
-    VXORPD Y0, Y0, Y0
+    // Initialize 4 independent accumulators
+    VXORPD Y0, Y0, Y0          // acc0
+    VXORPD Y3, Y3, Y3          // acc1
+    VXORPD Y4, Y4, Y4          // acc2
+    VXORPD Y5, Y5, Y5          // acc3
 
+    // Process 16 elements per iteration (4 vectors × 4 doubles)
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   sum_avx_loop4_check
+
+sum_avx_loop16:
+    VADDPD (SI), Y0, Y0
+    VADDPD 32(SI), Y3, Y3
+    VADDPD 64(SI), Y4, Y4
+    VADDPD 96(SI), Y5, Y5
+    ADDQ $128, SI
+    DECQ AX
+    JNZ  sum_avx_loop16
+
+    // Combine accumulators
+    VADDPD Y3, Y0, Y0
+    VADDPD Y4, Y0, Y0
+    VADDPD Y5, Y0, Y0
+
+sum_avx_loop4_check:
+    // Handle remaining 4-element chunks
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   sum_avx_remainder
 
 sum_avx_loop4:
-    VMOVUPD (SI), Y1
-    VADDPD Y0, Y1, Y0
+    VADDPD (SI), Y0, Y0
     ADDQ $32, SI
     DECQ AX
     JNZ  sum_avx_loop4
@@ -790,13 +816,56 @@ var_avx_divide:
     RET
 
 // func euclideanDistanceAVX(a, b []float64) float64
+// Optimized with 4 independent accumulators to hide FMA latency (4 cycles).
 TEXT ·euclideanDistanceAVX(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
     MOVQ b_base+24(FP), DI
 
-    VXORPD Y0, Y0, Y0
+    // Initialize 4 independent accumulators
+    VXORPD Y0, Y0, Y0          // acc0
+    VXORPD Y3, Y3, Y3          // acc1
+    VXORPD Y4, Y4, Y4          // acc2
+    VXORPD Y5, Y5, Y5          // acc3
 
+    // Process 16 elements per iteration
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   euclid_avx_loop4_check
+
+euclid_avx_loop16:
+    VMOVUPD (SI), Y1
+    VMOVUPD (DI), Y2
+    VSUBPD Y2, Y1, Y1
+    VFMADD231PD Y1, Y1, Y0
+
+    VMOVUPD 32(SI), Y1
+    VMOVUPD 32(DI), Y2
+    VSUBPD Y2, Y1, Y1
+    VFMADD231PD Y1, Y1, Y3
+
+    VMOVUPD 64(SI), Y1
+    VMOVUPD 64(DI), Y2
+    VSUBPD Y2, Y1, Y1
+    VFMADD231PD Y1, Y1, Y4
+
+    VMOVUPD 96(SI), Y1
+    VMOVUPD 96(DI), Y2
+    VSUBPD Y2, Y1, Y1
+    VFMADD231PD Y1, Y1, Y5
+
+    ADDQ $128, SI
+    ADDQ $128, DI
+    DECQ AX
+    JNZ  euclid_avx_loop16
+
+    // Combine accumulators
+    VADDPD Y3, Y0, Y0
+    VADDPD Y4, Y0, Y0
+    VADDPD Y5, Y0, Y0
+
+euclid_avx_loop4_check:
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   euclid_avx_remainder
@@ -804,8 +873,8 @@ TEXT ·euclideanDistanceAVX(SB), NOSPLIT, $0-56
 euclid_avx_loop4:
     VMOVUPD (SI), Y1
     VMOVUPD (DI), Y2
-    VSUBPD Y2, Y1, Y1        // diff
-    VFMADD231PD Y1, Y1, Y0   // sum += diff * diff
+    VSUBPD Y2, Y1, Y1
+    VFMADD231PD Y1, Y1, Y0
     ADDQ $32, SI
     ADDQ $32, DI
     DECQ AX
@@ -1167,19 +1236,44 @@ addsc_512_done:
     RET
 
 // func sumAVX512(a []float64) float64
+// Optimized with 4 independent accumulators to hide ADD latency (4 cycles).
 TEXT ·sumAVX512(SB), NOSPLIT, $0-32
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
 
-    VXORPD Z0, Z0, Z0
+    // Initialize 4 independent accumulators
+    VXORPD Z0, Z0, Z0          // acc0
+    VXORPD Z3, Z3, Z3          // acc1
+    VXORPD Z4, Z4, Z4          // acc2
+    VXORPD Z5, Z5, Z5          // acc3
 
+    // Process 32 elements per iteration (4 vectors × 8 doubles)
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   sum_512_loop8_check
+
+sum_512_loop32:
+    VADDPD (SI), Z0, Z0
+    VADDPD 64(SI), Z3, Z3
+    VADDPD 128(SI), Z4, Z4
+    VADDPD 192(SI), Z5, Z5
+    ADDQ $256, SI
+    DECQ AX
+    JNZ  sum_512_loop32
+
+    // Combine accumulators
+    VADDPD Z3, Z0, Z0
+    VADDPD Z4, Z0, Z0
+    VADDPD Z5, Z0, Z0
+
+sum_512_loop8_check:
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   sum_512_remainder
 
 sum_512_loop8:
-    VMOVUPD (SI), Z1
-    VADDPD Z0, Z1, Z0
+    VADDPD (SI), Z0, Z0
     ADDQ $64, SI
     DECQ AX
     JNZ  sum_512_loop8
@@ -1619,13 +1713,56 @@ var_512_divide:
     RET
 
 // func euclideanDistanceAVX512(a, b []float64) float64
+// Optimized with 4 independent accumulators to hide FMA latency (4 cycles).
 TEXT ·euclideanDistanceAVX512(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
     MOVQ b_base+24(FP), DI
 
-    VXORPD Z0, Z0, Z0
+    // Initialize 4 independent accumulators
+    VXORPD Z0, Z0, Z0          // acc0
+    VXORPD Z3, Z3, Z3          // acc1
+    VXORPD Z4, Z4, Z4          // acc2
+    VXORPD Z5, Z5, Z5          // acc3
 
+    // Process 32 elements per iteration
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   euclid_512_loop8_check
+
+euclid_512_loop32:
+    VMOVUPD (SI), Z1
+    VMOVUPD (DI), Z2
+    VSUBPD Z2, Z1, Z1
+    VFMADD231PD Z1, Z1, Z0
+
+    VMOVUPD 64(SI), Z1
+    VMOVUPD 64(DI), Z2
+    VSUBPD Z2, Z1, Z1
+    VFMADD231PD Z1, Z1, Z3
+
+    VMOVUPD 128(SI), Z1
+    VMOVUPD 128(DI), Z2
+    VSUBPD Z2, Z1, Z1
+    VFMADD231PD Z1, Z1, Z4
+
+    VMOVUPD 192(SI), Z1
+    VMOVUPD 192(DI), Z2
+    VSUBPD Z2, Z1, Z1
+    VFMADD231PD Z1, Z1, Z5
+
+    ADDQ $256, SI
+    ADDQ $256, DI
+    DECQ AX
+    JNZ  euclid_512_loop32
+
+    // Combine accumulators
+    VADDPD Z3, Z0, Z0
+    VADDPD Z4, Z0, Z0
+    VADDPD Z5, Z0, Z0
+
+euclid_512_loop8_check:
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   euclid_512_remainder

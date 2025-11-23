@@ -340,19 +340,44 @@ addsc32_done:
     RET
 
 // func sumAVX(a []float32) float32
+// Optimized with 4 independent accumulators to hide ADD latency (4 cycles).
 TEXT ·sumAVX(SB), NOSPLIT, $0-28
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
 
-    VXORPS Y0, Y0, Y0
+    // Initialize 4 independent accumulators
+    VXORPS Y0, Y0, Y0          // acc0
+    VXORPS Y3, Y3, Y3          // acc1
+    VXORPS Y4, Y4, Y4          // acc2
+    VXORPS Y5, Y5, Y5          // acc3
 
+    // Process 32 elements per iteration (4 vectors × 8 floats)
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   sum32_loop8_check
+
+sum32_loop32:
+    VADDPS (SI), Y0, Y0
+    VADDPS 32(SI), Y3, Y3
+    VADDPS 64(SI), Y4, Y4
+    VADDPS 96(SI), Y5, Y5
+    ADDQ $128, SI
+    DECQ AX
+    JNZ  sum32_loop32
+
+    // Combine accumulators
+    VADDPS Y3, Y0, Y0
+    VADDPS Y4, Y0, Y0
+    VADDPS Y5, Y0, Y0
+
+sum32_loop8_check:
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   sum32_remainder
 
 sum32_loop8:
-    VMOVUPS (SI), Y1
-    VADDPS Y0, Y1, Y0
+    VADDPS (SI), Y0, Y0
     ADDQ $32, SI
     DECQ AX
     JNZ  sum32_loop8
@@ -963,19 +988,44 @@ addsc32_512_done:
     RET
 
 // func sumAVX512(a []float32) float32
+// Optimized with 4 independent accumulators to hide ADD latency (4 cycles).
 TEXT ·sumAVX512(SB), NOSPLIT, $0-28
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
 
-    VXORPS Z0, Z0, Z0
+    // Initialize 4 independent accumulators
+    VXORPS Z0, Z0, Z0          // acc0
+    VXORPS Z3, Z3, Z3          // acc1
+    VXORPS Z4, Z4, Z4          // acc2
+    VXORPS Z5, Z5, Z5          // acc3
 
+    // Process 64 elements per iteration (4 vectors × 16 floats)
+    MOVQ CX, AX
+    SHRQ $6, AX                // len / 64
+    JZ   sum32_512_loop16_check
+
+sum32_512_loop64:
+    VADDPS (SI), Z0, Z0
+    VADDPS 64(SI), Z3, Z3
+    VADDPS 128(SI), Z4, Z4
+    VADDPS 192(SI), Z5, Z5
+    ADDQ $256, SI
+    DECQ AX
+    JNZ  sum32_512_loop64
+
+    // Combine accumulators
+    VADDPS Z3, Z0, Z0
+    VADDPS Z4, Z0, Z0
+    VADDPS Z5, Z0, Z0
+
+sum32_512_loop16_check:
+    ANDQ $63, CX
     MOVQ CX, AX
     SHRQ $4, AX
     JZ   sum32_512_remainder
 
 sum32_512_loop16:
-    VMOVUPS (SI), Z1
-    VADDPS Z0, Z1, Z0
+    VADDPS (SI), Z0, Z0
     ADDQ $64, SI
     DECQ AX
     JNZ  sum32_512_loop16

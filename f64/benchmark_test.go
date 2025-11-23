@@ -8,6 +8,13 @@ import (
 // Benchmark sizes: Small, Medium, Large
 var benchSizes = []int{128, 512, 1024, 4096, 16384, 65536}
 
+// Sink variables to prevent compiler optimizations (dead code elimination)
+// The compiler can't optimize away computations when results are stored in package-level variables
+var (
+	sink64   float64
+	sinkBool bool
+)
+
 // =============================================================================
 // Helper functions
 // =============================================================================
@@ -43,13 +50,13 @@ func BenchmarkDotProduct(b *testing.B) {
 		a, bb, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = DotProduct(a, bb)
+				sink64 = DotProduct(a, bb)
 			}
 			reportThroughput64(b, size*2) // 2 input vectors * 8 bytes
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = dotProductGo(a, bb)
+				sink64 = dotProductGo(a, bb)
 			}
 			reportThroughput64(b, size*2)
 		})
@@ -188,13 +195,13 @@ func BenchmarkSum(b *testing.B) {
 		a, _, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Sum(a)
+				sink64 = Sum(a)
 			}
 			reportThroughput64(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = sumGo(a)
+				sink64 = sumGo(a)
 			}
 			reportThroughput64(b, size)
 		})
@@ -206,13 +213,13 @@ func BenchmarkMin(b *testing.B) {
 		a, _, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Min(a)
+				sink64 = Min(a)
 			}
 			reportThroughput64(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = minGo(a)
+				sink64 = minGo(a)
 			}
 			reportThroughput64(b, size)
 		})
@@ -224,13 +231,13 @@ func BenchmarkMax(b *testing.B) {
 		a, _, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Max(a)
+				sink64 = Max(a)
 			}
 			reportThroughput64(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = maxGo(a)
+				sink64 = maxGo(a)
 			}
 			reportThroughput64(b, size)
 		})
@@ -377,7 +384,7 @@ func BenchmarkMean(b *testing.B) {
 		a, _, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Mean(a)
+				sink64 = Mean(a)
 			}
 			reportThroughput64(b, size)
 		})
@@ -389,14 +396,14 @@ func BenchmarkVariance(b *testing.B) {
 		a, _, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Variance(a)
+				sink64 = Variance(a)
 			}
 			// Two passes: mean + variance, so 2x data read
 			reportThroughput64(b, size*2)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = varianceFullGo(a)
+				sink64 = varianceFullGo(a)
 			}
 			// Two passes: mean + variance, so 2x data read
 			reportThroughput64(b, size*2)
@@ -411,13 +418,13 @@ func BenchmarkVarianceKernel(b *testing.B) {
 		mean := Mean(a)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = variance64(a, mean)
+				sink64 = variance64(a, mean)
 			}
 			reportThroughput64(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = variance64Go(a, mean)
+				sink64 = variance64Go(a, mean)
 			}
 			reportThroughput64(b, size)
 		})
@@ -429,13 +436,13 @@ func BenchmarkEuclideanDistance(b *testing.B) {
 		a, bb, _, _ := makeBenchData64(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = EuclideanDistance(a, bb)
+				sink64 = EuclideanDistance(a, bb)
 			}
 			reportThroughput64(b, size*2)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = euclideanDistance64Go(a, bb)
+				sink64 = euclideanDistance64Go(a, bb)
 			}
 			reportThroughput64(b, size*2)
 		})
@@ -566,14 +573,14 @@ func BenchmarkSummary(b *testing.B) {
 		simd func()
 		goFn func()
 	}{
-		{"DotProduct", func() { _ = DotProduct(a, bb) }, func() { _ = dotProductGo(a, bb) }},
+		{"DotProduct", func() { sink64 = DotProduct(a, bb) }, func() { sink64 = dotProductGo(a, bb) }},
 		{"Add", func() { Add(dst, a, bb) }, func() { addGo(dst, a, bb) }},
 		{"Mul", func() { Mul(dst, a, bb) }, func() { mulGo(dst, a, bb) }},
 		{"Scale", func() { Scale(dst, a, 2.5) }, func() { scaleGo(dst, a, 2.5) }},
-		{"Sum", func() { _ = Sum(a) }, func() { _ = sumGo(a) }},
+		{"Sum", func() { sink64 = Sum(a) }, func() { sink64 = sumGo(a) }},
 		{"FMA", func() { FMA(dst, a, bb, c) }, func() { fmaGo(dst, a, bb, c) }},
 		{"Sqrt", func() { Sqrt(dst, a) }, func() { sqrt64Go(dst, a) }},
-		{"EuclideanDist", func() { _ = EuclideanDistance(a, bb) }, func() { _ = euclideanDistance64Go(a, bb) }},
+		{"EuclideanDist", func() { sink64 = EuclideanDistance(a, bb) }, func() { sink64 = euclideanDistance64Go(a, bb) }},
 	}
 
 	for _, op := range ops {

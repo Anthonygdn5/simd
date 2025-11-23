@@ -8,6 +8,13 @@ import (
 // Benchmark sizes: Small, Medium, Large
 var benchSizes = []int{128, 512, 1024, 4096, 16384, 65536}
 
+// Sink variables to prevent compiler optimizations (dead code elimination)
+// The compiler can't optimize away computations when results are stored in package-level variables
+var (
+	sink32   float32
+	sinkBool bool
+)
+
 // =============================================================================
 // Helper functions
 // =============================================================================
@@ -44,13 +51,13 @@ func BenchmarkDotProduct(b *testing.B) {
 		a, bb, _, _ := makeBenchData32(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = DotProduct(a, bb)
+				sink32 = DotProduct(a, bb)
 			}
 			reportThroughput32(b, size*2) // 2 input vectors * 4 bytes
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = dotProductGo(a, bb)
+				sink32 = dotProductGo(a, bb)
 			}
 			reportThroughput32(b, size*2)
 		})
@@ -190,13 +197,13 @@ func BenchmarkSum(b *testing.B) {
 		a, _, _, _ := makeBenchData32(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Sum(a)
+				sink32 = Sum(a)
 			}
 			reportThroughput32(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = sumGo(a)
+				sink32 = sumGo(a)
 			}
 			reportThroughput32(b, size)
 		})
@@ -208,13 +215,13 @@ func BenchmarkMin(b *testing.B) {
 		a, _, _, _ := makeBenchData32(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Min(a)
+				sink32 = Min(a)
 			}
 			reportThroughput32(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = minGo(a)
+				sink32 = minGo(a)
 			}
 			reportThroughput32(b, size)
 		})
@@ -226,13 +233,13 @@ func BenchmarkMax(b *testing.B) {
 		a, _, _, _ := makeBenchData32(size)
 		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = Max(a)
+				sink32 = Max(a)
 			}
 			reportThroughput32(b, size)
 		})
 		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = maxGo(a)
+				sink32 = maxGo(a)
 			}
 			reportThroughput32(b, size)
 		})
@@ -423,11 +430,11 @@ func BenchmarkSummary(b *testing.B) {
 		simd func()
 		goFn func()
 	}{
-		{"DotProduct", func() { _ = DotProduct(a, bb) }, func() { _ = dotProductGo(a, bb) }},
+		{"DotProduct", func() { sink32 = DotProduct(a, bb) }, func() { sink32 = dotProductGo(a, bb) }},
 		{"Add", func() { Add(dst, a, bb) }, func() { addGo(dst, a, bb) }},
 		{"Mul", func() { Mul(dst, a, bb) }, func() { mulGo(dst, a, bb) }},
 		{"Scale", func() { Scale(dst, a, 2.5) }, func() { scaleGo(dst, a, 2.5) }},
-		{"Sum", func() { _ = Sum(a) }, func() { _ = sumGo(a) }},
+		{"Sum", func() { sink32 = Sum(a) }, func() { sink32 = sumGo(a) }},
 		{"FMA", func() { FMA(dst, a, bb, c) }, func() { fmaGo(dst, a, bb, c) }},
 	}
 
