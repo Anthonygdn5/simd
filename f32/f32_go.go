@@ -12,7 +12,7 @@ const (
 
 func dotProductGo(a, b []float32) float32 {
 	var sum float32
-	n := len(a)
+	n := min(len(a), len(b))
 	n8 := n &^ unrollMask
 
 	for i := 0; i < n8; i += 8 {

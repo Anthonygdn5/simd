@@ -20,9 +20,13 @@ GLOBL absf64mask<>(SB), RODATA|NOPTR, $64
 // func dotProductAVX(a, b []float64) float64
 // Optimized with 4 independent accumulators to hide FMA latency (4 cycles).
 // Processes 16 doubles per iteration for better instruction-level parallelism.
+// Handles mismatched slice lengths: uses min(len(a), len(b)).
 TEXT ·dotProductAVX(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
+    MOVQ b_len+32(FP), AX
+    CMPQ AX, CX
+    CMOVQLT AX, CX             // CX = min(len(a), len(b))
     MOVQ b_base+24(FP), DI
 
     // Initialize 4 independent accumulators
@@ -1053,9 +1057,13 @@ euclid_avx_sqrt:
 // func dotProductAVX512(a, b []float64) float64
 // Optimized with 4 independent accumulators to hide FMA latency.
 // Processes 32 doubles per iteration (4 vectors × 8 doubles).
+// Handles mismatched slice lengths: uses min(len(a), len(b)).
 TEXT ·dotProductAVX512(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
+    MOVQ b_len+32(FP), AX
+    CMPQ AX, CX
+    CMOVQLT AX, CX             // CX = min(len(a), len(b))
     MOVQ b_base+24(FP), DI
 
     // Initialize 4 independent accumulators
@@ -2047,9 +2055,13 @@ euclid_512_sqrt:
 // ============================================================================
 
 // func dotProductSSE2(a, b []float64) float64
+// Handles mismatched slice lengths: uses min(len(a), len(b)).
 TEXT ·dotProductSSE2(SB), NOSPLIT, $0-56
     MOVQ a_base+0(FP), SI
     MOVQ a_len+8(FP), CX
+    MOVQ b_len+32(FP), AX
+    CMPQ AX, CX
+    CMOVQLT AX, CX             // CX = min(len(a), len(b))
     MOVQ b_base+24(FP), DI
 
     XORPD X0, X0

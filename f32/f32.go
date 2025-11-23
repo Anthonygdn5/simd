@@ -15,11 +15,23 @@ import "math"
 //
 // Uses AVX+FMA on AMD64 (8x float32), NEON on ARM64 (4x float32).
 func DotProduct(a, b []float32) float32 {
-	n := min(len(b), len(a))
-	if n == 0 {
+	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
-	return dotProduct(a[:n], b[:n])
+	return dotProduct(a, b)
+}
+
+// DotProductUnsafe computes the dot product without length validation.
+// This is a low-overhead variant for performance-critical code paths.
+//
+// PRECONDITIONS (caller must ensure):
+//   - len(a) == len(b)
+//   - len(a) > 0
+//
+// Violating these preconditions results in undefined behavior (panic or incorrect results).
+// Use DotProduct for safe operation with automatic length handling.
+func DotProductUnsafe(a, b []float32) float32 {
+	return dotProduct(a, b)
 }
 
 // Add computes element-wise addition: dst[i] = a[i] + b[i].

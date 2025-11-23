@@ -12,7 +12,7 @@ const (
 
 func dotProductGo(a, b []float64) float64 {
 	var sum float64
-	n := len(a)
+	n := min(len(a), len(b))
 	n4 := n &^ unrollMask // Round down to multiple of 4
 
 	// Unrolled loop: 4 FMAs per iteration

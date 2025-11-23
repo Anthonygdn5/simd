@@ -20,9 +20,13 @@
 // FADDP Sd, Vn.2S:          0x7E30D800 | (Vn << 5) | Vd
 
 // func dotProductNEON(a, b []float32) float32
+// Handles mismatched slice lengths: uses min(len(a), len(b)).
 TEXT ·dotProductNEON(SB), NOSPLIT, $0-52
     MOVD a_base+0(FP), R0
     MOVD a_len+8(FP), R2
+    MOVD b_len+32(FP), R3
+    CMP R3, R2
+    CSEL LT, R3, R2, R2        // R2 = min(len(a), len(b))
     MOVD b_base+24(FP), R1
 
     VEOR V0.B16, V0.B16, V0.B16
