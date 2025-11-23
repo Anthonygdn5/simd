@@ -11,7 +11,7 @@ A high-performance SIMD (Single Instruction, Multiple Data) library for Go provi
 - **Pure Go assembly** - Native Go assembler, simple cross-compilation
 - **Runtime CPU detection** - Automatically selects optimal implementation (AVX-512, AVX+FMA, SSE2, NEON, or pure Go)
 - **Zero allocations** - All operations work on pre-allocated slices
-- **34 operations** - Arithmetic, reduction, statistical, vector, signal processing, and complex number operations
+- **37 operations** - Arithmetic, reduction, statistical, vector, signal processing, and complex number operations
 - **Multi-architecture** - AMD64 (AVX-512/AVX+FMA/SSE2) and ARM64 (NEON) with pure Go fallback
 - **Thread-safe** - All functions are safe for concurrent use
 
@@ -106,7 +106,10 @@ fmt.Println(cpu.HasNEON())   // true/false
 | **Range**       | `Clamp(dst, a, min, max)`     | Clamp to range              | 8x / 4x / 2x                        |
 | **Batch**       | `DotProductBatch(r, rows, v)` | Multiple dot products       | 8x / 4x / 2x                        |
 | **Signal**      | `ConvolveValid(dst, sig, k)`  | FIR filter / convolution    | 8x / 4x / 2x                        |
+|                 | `ConvolveValidMulti(dsts, sig, ks)` | Multi-kernel convolution | 8x / 4x / 2x                   |
 |                 | `AccumulateAdd(dst, src, off)`| Overlap-add: dst[off:] += src | 8x / 4x / 2x                      |
+| **Audio**       | `Interleave2(dst, a, b)`      | Pack stereo: [L,R,L,R,...]  | 4x / 2x                             |
+|                 | `Deinterleave2(a, b, src)`    | Unpack stereo to channels   | 4x / 2x                             |
 
 ### `f32` - float32 Operations
 
@@ -227,19 +230,24 @@ c128.Abs(magnitude, signalFFT)                  // Extract magnitude for display
 
 #### Batch & Signal Processing (varied sizes)
 
-| Operation             | Config             | SIMD    | Go      | Speedup  |
-| --------------------- | ------------------ | ------- | ------- | -------- |
-| DotProductBatch (f64) | 256 vec × 100 rows | 3.2 µs  | 20.5 µs | **6.4x** |
-| DotProductBatch (f32) | 256 vec × 100 rows | 1.5 µs  | 9.8 µs  | **6.7x** |
-| ConvolveValid (f64)   | 4096 sig × 64 ker  | 26.6 µs | 169 µs  | **6.3x** |
-| ConvolveValid (f32)   | 4096 sig × 64 ker  | 17.9 µs | 80 µs   | **4.5x** |
+| Operation               | Config             | SIMD    | Go      | Speedup  |
+| ----------------------- | ------------------ | ------- | ------- | -------- |
+| DotProductBatch (f64)   | 256 vec × 100 rows | 3.2 µs  | 20.5 µs | **6.4x** |
+| DotProductBatch (f32)   | 256 vec × 100 rows | 1.5 µs  | 9.8 µs  | **6.7x** |
+| ConvolveValid (f64)     | 4096 sig × 64 ker  | 26.6 µs | 169 µs  | **6.3x** |
+| ConvolveValid (f32)     | 4096 sig × 64 ker  | 17.9 µs | 80 µs   | **4.5x** |
+| ConvolveValidMulti (f64)| 1000 sig × 64 ker × 2 | 13.4 µs | -    | -        |
+| Interleave2 (f64)       | 1000 pairs         | 216 ns  | -       | -        |
+| Deinterleave2 (f64)     | 1000 pairs         | 216 ns  | -       | -        |
+| Interleave2 (f32)       | 1000 pairs         | 109 ns  | -       | -        |
+| Deinterleave2 (f32)     | 1000 pairs         | 216 ns  | -       | -        |
 
 #### Performance Summary
 
 | Package  | Average Speedup | Best         | Operations   |
 | -------- | --------------- | ------------ | ------------ |
-| **f32**  | **6.5x**        | 21.8x (Abs)  | 17 functions |
-| **f64**  | **3.2x**        | 7.9x (Clamp) | 25 functions |
+| **f32**  | **6.5x**        | 21.8x (Abs)  | 20 functions |
+| **f64**  | **3.2x**        | 7.9x (Clamp) | 28 functions |
 | **c128** | **1.77x**       | 2.2x (Mul)   | 9 functions  |
 
 ### ARM64 (Raspberry Pi 5, NEON)
