@@ -10,6 +10,16 @@
 // NEON processes 128 bits = 2 float64 = 1 complex128 per iteration
 //
 // Complex multiplication: (a + bi)(c + di) = (ac - bd) + (ad + bc)i
+//
+// NEON opcode formulas for float64 (2D arrangement):
+// FMUL Vd.2D, Vn.2D, Vm.2D: 0x6E60DC00 | (Vm << 16) | (Vn << 5) | Vd
+// FADD Vd.2D, Vn.2D, Vm.2D: 0x4E60D400 | (Vm << 16) | (Vn << 5) | Vd
+// FSUB Vd.2D, Vn.2D, Vm.2D: 0x4EE0D400 | (Vm << 16) | (Vn << 5) | Vd
+//
+// Note: In Go ARM64 asm:
+// - F0-F31 alias the low 64 bits of V0-V31 (F0 = V0.D[0])
+// - To access V0.D[1], use VDUP V0.D[1], V1.D2, then F1 has that value
+// - VMOV Vn.D[x], Rm moves vector element to general-purpose register
 
 // func mulNEON(dst, a, b []complex128)
 TEXT ·mulNEON(SB), NOSPLIT, $0-72
@@ -22,32 +32,31 @@ TEXT ·mulNEON(SB), NOSPLIT, $0-72
 
 mul_neon_loop:
     // Load one complex128 from a and b
-    VLD1 (R2), [V0.D2]           // V0 = [ar, ai]
-    VLD1 (R3), [V1.D2]           // V1 = [br, bi]
+    VLD1 (R2), [V0.D2]           // V0 = [ar, ai], F0 = ar
+    VLD1 (R3), [V1.D2]           // V1 = [br, bi], F1 = br
 
-    // Duplicate real part of a: V2 = [ar, ar]
-    VDUP V0.D[0], V2.D2
+    // Extract all four components to scalar registers
+    // ar is already in F0 (low 64 bits of V0)
+    // br is already in F1 (low 64 bits of V1)
+    VDUP V0.D[1], V2.D2          // V2 = [ai, ai], F2 = ai
+    VDUP V1.D[1], V3.D2          // V3 = [bi, bi], F3 = bi
 
-    // Duplicate imag part of a: V3 = [ai, ai]
-    VDUP V0.D[1], V3.D2
-
-    // Swap b: V4 = [bi, br]
-    VEXT $8, V1.B16, V1.B16, V4.B16
-
-    // V2 = ar * b = [ar*br, ar*bi]
-    FMULD V1.D2, V2.D2, V2.D2
-
-    // V5 = ai * swapped_b = [ai*bi, ai*br]
-    FMULD V4.D2, V3.D2, V5.D2
+    // Complex multiplication: (ar + ai*i)(br + bi*i) = (ar*br - ai*bi) + (ar*bi + ai*br)*i
+    // Compute products using scalar FP registers
+    FMULD F0, F1, F4             // F4 = ar * br
+    FMULD F2, F3, F5             // F5 = ai * bi
+    FMULD F0, F3, F6             // F6 = ar * bi
+    FMULD F2, F1, F7             // F7 = ai * br
 
     // result_real = ar*br - ai*bi
-    // result_imag = ar*bi + ai*br
-    // V2[0] = V2[0] - V5[0], V2[1] = V2[1] + V5[1]
-    // Use FSUB for real, FADD for imag
-    FSUBD V5.D[0], V2.D[0], V6.D[0]
-    FADDD V5.D[1], V2.D[1], V6.D[1]
+    FSUBD F5, F4, F4             // F4 = ar*br - ai*bi
 
-    VST1 [V6.D2], (R0)
+    // result_imag = ar*bi + ai*br
+    FADDD F6, F7, F5             // F5 = ar*bi + ai*br
+
+    // Store result directly to memory
+    FMOVD F4, (R0)               // Store real part
+    FMOVD F5, 8(R0)              // Store imag part
 
     ADD  $16, R2
     ADD  $16, R3
@@ -59,6 +68,7 @@ mul_neon_done:
     RET
 
 // func mulConjNEON(dst, a, b []complex128)
+// a * conj(b) = (ar + ai*i)(br - bi*i) = (ar*br + ai*bi) + (ai*br - ar*bi)*i
 TEXT ·mulConjNEON(SB), NOSPLIT, $0-72
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R1
@@ -68,25 +78,28 @@ TEXT ·mulConjNEON(SB), NOSPLIT, $0-72
     CBZ  R1, mulconj_neon_done
 
 mulconj_neon_loop:
-    VLD1 (R2), [V0.D2]           // [ar, ai]
-    VLD1 (R3), [V1.D2]           // [br, bi]
+    VLD1 (R2), [V0.D2]           // V0 = [ar, ai], F0 = ar
+    VLD1 (R3), [V1.D2]           // V1 = [br, bi], F1 = br
 
-    VDUP V0.D[0], V2.D2          // [ar, ar]
-    VDUP V0.D[1], V3.D2          // [ai, ai]
+    // Extract components
+    VDUP V0.D[1], V2.D2          // F2 = ai
+    VDUP V1.D[1], V3.D2          // F3 = bi
 
-    // For a * conj(b) = [ar*br + ai*bi, ai*br - ar*bi]
-    // V4 = ar * b = [ar*br, ar*bi]
-    FMULD V1.D2, V2.D2, V4.D2
-
-    // V5 = ai * b = [ai*br, ai*bi]
-    FMULD V1.D2, V3.D2, V5.D2
+    // Compute products
+    FMULD F0, F1, F4             // F4 = ar * br
+    FMULD F2, F3, F5             // F5 = ai * bi
+    FMULD F2, F1, F6             // F6 = ai * br
+    FMULD F0, F3, F7             // F7 = ar * bi
 
     // result_real = ar*br + ai*bi
-    // result_imag = ai*br - ar*bi
-    FADDD V5.D[1], V4.D[0], V6.D[0]    // ar*br + ai*bi
-    FSUBD V4.D[1], V5.D[0], V6.D[1]    // ai*br - ar*bi
+    FADDD F4, F5, F4             // F4 = ar*br + ai*bi
 
-    VST1 [V6.D2], (R0)
+    // result_imag = ai*br - ar*bi
+    FSUBD F7, F6, F5             // F5 = ai*br - ar*bi
+
+    // Store result
+    FMOVD F4, (R0)
+    FMOVD F5, 8(R0)
 
     ADD  $16, R2
     ADD  $16, R3
@@ -98,44 +111,37 @@ mulconj_neon_done:
     RET
 
 // func scaleNEON(dst, a []complex128, s complex128)
+// a * s = (ar + ai*i)(sr + si*i) = (ar*sr - ai*si) + (ar*si + ai*sr)*i
 TEXT ·scaleNEON(SB), NOSPLIT, $0-64
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R1
     MOVD a_base+24(FP), R2
-    // s is at s+48(FP) (real) and s+56(FP) (imag)
 
-    FMOVD s+48(FP), F16          // sr
-    FMOVD s+56(FP), F17          // si
-
-    VDUP F16, V6.D2              // [sr, sr]
-    VDUP F17, V7.D2              // [si, si]
+    // Load scalar s once
+    FMOVD s+48(FP), F20          // F20 = sr (kept across loop)
+    FMOVD s+56(FP), F21          // F21 = si (kept across loop)
 
     CBZ  R1, scale_neon_done
 
 scale_neon_loop:
-    VLD1 (R2), [V0.D2]           // [ar, ai]
+    VLD1 (R2), [V0.D2]           // V0 = [ar, ai], F0 = ar
+    VDUP V0.D[1], V1.D2          // F1 = ai
 
-    VDUP V0.D[0], V2.D2          // [ar, ar]
-    VDUP V0.D[1], V3.D2          // [ai, ai]
+    // Compute products
+    FMULD F0, F20, F2            // F2 = ar * sr
+    FMULD F1, F21, F3            // F3 = ai * si
+    FMULD F0, F21, F4            // F4 = ar * si
+    FMULD F1, F20, F5            // F5 = ai * sr
 
-    // V4 = ar * [sr, si] = [ar*sr, ar*si]
-    // V5 = ai * [si, sr] = [ai*si, ai*sr]
-    // We need: [ar*sr - ai*si, ar*si + ai*sr]
+    // result_real = ar*sr - ai*si
+    FSUBD F3, F2, F2             // F2 = ar*sr - ai*si
 
-    // Create [sr, si] and [si, sr]
-    VMOV V6.D[0], V4.D[0]
-    VMOV V7.D[0], V4.D[1]        // V4 = [sr, si]
+    // result_imag = ar*si + ai*sr
+    FADDD F4, F5, F3             // F3 = ar*si + ai*sr
 
-    VMOV V7.D[0], V5.D[0]
-    VMOV V6.D[0], V5.D[1]        // V5 = [si, sr]
-
-    FMULD V4.D2, V2.D2, V2.D2    // [ar*sr, ar*si]
-    FMULD V5.D2, V3.D2, V3.D2    // [ai*si, ai*sr]
-
-    FSUBD V3.D[0], V2.D[0], V8.D[0]    // ar*sr - ai*si
-    FADDD V3.D[1], V2.D[1], V8.D[1]    // ar*si + ai*sr
-
-    VST1 [V8.D2], (R0)
+    // Store result
+    FMOVD F2, (R0)
+    FMOVD F3, 8(R0)
 
     ADD  $16, R2
     ADD  $16, R0
@@ -146,6 +152,7 @@ scale_neon_done:
     RET
 
 // func addNEON(dst, a, b []complex128)
+// Vector add - can use NEON FADD since we're adding both real and imag
 TEXT ·addNEON(SB), NOSPLIT, $0-72
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R1
@@ -157,7 +164,7 @@ TEXT ·addNEON(SB), NOSPLIT, $0-72
 add_neon_loop:
     VLD1 (R2), [V0.D2]
     VLD1 (R3), [V1.D2]
-    FADDD V0.D2, V1.D2, V2.D2
+    WORD $0x4E61D402             // FADD V2.2D, V0.2D, V1.2D
     VST1 [V2.D2], (R0)
     ADD  $16, R2
     ADD  $16, R3
@@ -169,6 +176,7 @@ add_neon_done:
     RET
 
 // func subNEON(dst, a, b []complex128)
+// Vector sub - can use NEON FSUB since we're subtracting both real and imag
 TEXT ·subNEON(SB), NOSPLIT, $0-72
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R1
@@ -180,7 +188,7 @@ TEXT ·subNEON(SB), NOSPLIT, $0-72
 sub_neon_loop:
     VLD1 (R2), [V0.D2]
     VLD1 (R3), [V1.D2]
-    FSUBD V1.D2, V0.D2, V2.D2
+    WORD $0x4EE1D402             // FSUB V2.2D, V0.2D, V1.2D
     VST1 [V2.D2], (R0)
     ADD  $16, R2
     ADD  $16, R3
@@ -204,22 +212,23 @@ TEXT ·absNEON(SB), NOSPLIT, $0-56
     CBZ  R1, abs_neon_done
 
 abs_neon_loop:
-    VLD1 (R2), [V0.D2]     // V0 = [real, imag]
+    VLD1 (R2), [V0.D2]           // V0 = [real, imag], F0 = real
+    VDUP V0.D[1], V1.D2          // F1 = imag
 
-    // V1 = real * real
-    FMULD V0.D[0], V0.D[0], V1.D[0]
+    // F2 = real * real
+    FMULD F0, F0, F2
 
-    // V2 = imag * imag
-    FMULD V0.D[1], V0.D[1], V2.D[0]
+    // F3 = imag * imag
+    FMULD F1, F1, F3
 
-    // V1 = real² + imag²
-    FADDD V2.D[0], V1.D[0], V1.D[0]
+    // F4 = real² + imag²
+    FADDD F2, F3, F4
 
-    // V0 = sqrt(real² + imag²)
-    FSQRTD V1.D[0], V0.D[0]
+    // F5 = sqrt(real² + imag²)
+    FSQRTD F4, F5
 
     // Store result (single float64)
-    VST1 [V0.D1], (R0)
+    FMOVD F5, (R0)
 
     ADD  $16, R2
     ADD  $8, R0
@@ -242,19 +251,20 @@ TEXT ·absSqNEON(SB), NOSPLIT, $0-56
     CBZ  R1, abssq_neon_done
 
 abssq_neon_loop:
-    VLD1 (R2), [V0.D2]     // V0 = [real, imag]
+    VLD1 (R2), [V0.D2]           // V0 = [real, imag], F0 = real
+    VDUP V0.D[1], V1.D2          // F1 = imag
 
-    // V1 = real * real
-    FMULD V0.D[0], V0.D[0], V1.D[0]
+    // F2 = real * real
+    FMULD F0, F0, F2
 
-    // V2 = imag * imag
-    FMULD V0.D[1], V0.D[1], V2.D[0]
+    // F3 = imag * imag
+    FMULD F1, F1, F3
 
-    // V1 = real² + imag²
-    FADDD V2.D[0], V1.D[0], V1.D[0]
+    // F4 = real² + imag²
+    FADDD F2, F3, F4
 
     // Store result (single float64)
-    VST1 [V1.D1], (R0)
+    FMOVD F4, (R0)
 
     ADD  $16, R2
     ADD  $8, R0
@@ -268,31 +278,11 @@ abssq_neon_done:
 // PHASE - PHASE ANGLE: atan2(imag, real)
 // ============================================================================
 // Note: atan2 is not available as NEON instruction
-// We extract the imaginary component and return it as placeholder
-// Production code should call math.Atan2 or use approximation
+// This is a stub that falls back to Go implementation
 
 // func phaseNEON(dst []float64, a []complex128)
 TEXT ·phaseNEON(SB), NOSPLIT, $0-56
-    MOVD dst_base+0(FP), R0
-    MOVD dst_len+8(FP), R1
-    MOVD a_base+24(FP), R2
-
-    CBZ  R1, phase_neon_done
-
-phase_neon_loop:
-    VLD1 (R2), [V0.D2]     // V0 = [real, imag]
-
-    // Extract imaginary part (lane 1) as placeholder
-    // In production, should compute atan2(imag, real)
-    VST1 [V0.D1], (R0)     // Store lane 1 (imag) temporarily
-
-    ADD  $16, R2
-    ADD  $8, R0
-    SUB  $1, R1
-    CBNZ R1, phase_neon_loop
-
-phase_neon_done:
-    RET
+    B ·phaseGo(SB)
 
 // ============================================================================
 // CONJ - COMPLEX CONJUGATE: conj(a + bi) = a - bi
@@ -307,25 +297,15 @@ TEXT ·conjNEON(SB), NOSPLIT, $0-72
     CBZ  R1, conj_neon_done
 
 conj_neon_loop:
-    VLD1 (R2), [V0.D2]     // V0 = [real, imag]
+    VLD1 (R2), [V0.D2]           // V0 = [real, imag], F0 = real
+    VDUP V0.D[1], V1.D2          // F1 = imag
 
-    // Negate imaginary part: V1 = [real, -imag]
-    FNEGD V0.D[1], V1.D[1]
-    VMOV V0.D[0], V1.D[0]  // Keep real part unchanged
-
-    // Alternatively, using scalar operations:
-    // Extract real
-    FMOVD V0.D[0], F0
-
-    // Extract and negate imag
-    FMOVD V0.D[1], F1
+    // Negate imaginary part
     FNEGD F1, F1
 
-    // Construct result vector
-    VMOV F0, V1.D[0]
-    VMOV F1, V1.D[1]
-
-    VST1 [V1.D2], (R0)
+    // Store result - real unchanged, imag negated
+    FMOVD F0, (R0)               // Store real
+    FMOVD F1, 8(R0)              // Store -imag
 
     ADD  $16, R2
     ADD  $16, R0
