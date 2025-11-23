@@ -281,7 +281,7 @@ abssq_neon_done:
 // This is a stub that falls back to Go implementation
 
 // func phaseNEON(dst []float64, a []complex128)
-TEXT ·phaseNEON(SB), $0-56
+TEXT ·phaseNEON(SB), NOSPLIT, $0-56
     B ·phaseGo(SB)
 
 // ============================================================================
