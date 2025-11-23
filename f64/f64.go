@@ -365,12 +365,13 @@ func Deinterleave2(a, b, src []float64) {
 
 const interleave2Channels = 2
 
-// ConvolveValidMulti applies multiple kernels to the same signal in one pass.
+// ConvolveValidMulti applies multiple kernels to the same signal.
 // dsts[k][i] = sum(signal[i+j] * kernels[k][j]) for each kernel k.
 // All kernels must have the same length.
 //
-// This is more cache-efficient than calling ConvolveValid in a loop because
-// the signal data stays hot in cache across all kernel applications.
+// This is a convenience wrapper that calls ConvolveValid for each kernel.
+// For polyphase resampling with multiple filter phases, this provides
+// a clean API without additional overhead.
 //
 // Panics if kernels have different lengths or if dsts/kernels lengths don't match.
 func ConvolveValidMulti(dsts [][]float64, signal []float64, kernels [][]float64) {

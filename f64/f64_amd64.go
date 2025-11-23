@@ -300,13 +300,10 @@ func deinterleave2_64(a, b, src []float64) {
 	deinterleave2Go(a, b, src)
 }
 
-func convolveValidMulti64(dsts [][]float64, signal []float64, kernels [][]float64, n, kLen int) {
-	// Use the SIMD dotProduct for each kernel application
-	for i := range n {
-		sig := signal[i : i+kLen]
-		for k, kernel := range kernels {
-			dsts[k][i] = dotProduct(sig, kernel)
-		}
+func convolveValidMulti64(dsts [][]float64, signal []float64, kernels [][]float64, n, _ int) {
+	// Kernel-major loop order: each kernel stays hot in cache for entire signal pass
+	for k, kernel := range kernels {
+		convolveValid64(dsts[k][:n], signal, kernel)
 	}
 }
 

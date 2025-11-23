@@ -290,12 +290,10 @@ func deinterleave2_32(a, b, src []float32) {
 	deinterleave2Go(a, b, src)
 }
 
-func convolveValidMulti32(dsts [][]float32, signal []float32, kernels [][]float32, n, kLen int) {
-	for i := range n {
-		sig := signal[i : i+kLen]
-		for k, kernel := range kernels {
-			dsts[k][i] = dotProduct(sig, kernel)
-		}
+func convolveValidMulti32(dsts [][]float32, signal []float32, kernels [][]float32, n, _ int) {
+	// Kernel-major loop order: each kernel stays hot in cache for entire signal pass
+	for k, kernel := range kernels {
+		convolveValid32(dsts[k][:n], signal, kernel)
 	}
 }
 

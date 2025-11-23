@@ -236,12 +236,10 @@ func deinterleave2Go(a, b, src []float64) {
 	}
 }
 
-func convolveValidMultiGo(dsts [][]float64, signal []float64, kernels [][]float64, n, kLen int) {
-	for i := range n {
-		sig := signal[i : i+kLen]
-		for k, kernel := range kernels {
-			dsts[k][i] = dotProductGo(sig, kernel)
-		}
+func convolveValidMultiGo(dsts [][]float64, signal []float64, kernels [][]float64, n, _ int) {
+	// Kernel-major loop order: each kernel stays hot in cache for entire signal pass
+	for k, kernel := range kernels {
+		convolveValid64Go(dsts[k][:n], signal, kernel)
 	}
 }
 
