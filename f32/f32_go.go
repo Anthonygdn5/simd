@@ -173,3 +173,56 @@ func convolveValidMultiGo(dsts [][]float32, signal []float32, kernels [][]float3
 		}
 	}
 }
+
+func sqrt32Go(dst, a []float32) {
+	for i := range dst {
+		dst[i] = float32(math.Sqrt(float64(a[i])))
+	}
+}
+
+func reciprocal32Go(dst, a []float32) {
+	for i := range dst {
+		dst[i] = 1.0 / a[i]
+	}
+}
+
+func minIdxGo(a []float32) int {
+	idx := 0
+	m := a[0]
+	for i, v := range a[1:] {
+		if v < m {
+			m = v
+			idx = i + 1
+		}
+	}
+	return idx
+}
+
+func maxIdxGo(a []float32) int {
+	idx := 0
+	m := a[0]
+	for i, v := range a[1:] {
+		if v > m {
+			m = v
+			idx = i + 1
+		}
+	}
+	return idx
+}
+
+func addScaledGo(dst []float32, alpha float32, s []float32) {
+	for i := range dst {
+		dst[i] += alpha * s[i]
+	}
+}
+
+func cumulativeSum32Go(dst, a []float32) {
+	if len(dst) == 0 {
+		return
+	}
+	sum := float32(0)
+	for i := range dst {
+		sum += a[i]
+		dst[i] = sum
+	}
+}

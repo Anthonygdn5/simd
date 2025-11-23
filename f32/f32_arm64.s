@@ -643,3 +643,115 @@ deinterleave2_neon32_loop1:
 
 deinterleave2_neon32_done:
     RET
+
+// Additional NEON operations for f32
+
+// FSQRT Vd.4S, Vn.4S: 0x6EA1F800 | (Vn << 5) | Vd
+
+// func sqrtNEON(dst, a []float32)
+TEXT ·sqrtNEON(SB), NOSPLIT, $0-48
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R2
+    MOVD a_base+24(FP), R1
+
+    LSR $2, R2, R3
+    CBZ R3, sqrt32_scalar
+
+sqrt32_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    WORD $0x6EA1F801           // FSQRT V1.4S, V0.4S
+    VST1.P [V1.S4], 16(R0)
+    SUB $1, R3
+    CBNZ R3, sqrt32_loop4
+
+sqrt32_scalar:
+    AND $3, R2
+    CBZ R2, sqrt32_done
+
+sqrt32_loop1:
+    FMOVS (R1), F0
+    FSQRTS F0, F0
+    FMOVS F0, (R0)
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R2
+    CBNZ R2, sqrt32_loop1
+
+sqrt32_done:
+    RET
+
+// func reciprocalNEON(dst, a []float32)
+// Uses full precision division (FRECPE is only approximate)
+TEXT ·reciprocalNEON(SB), NOSPLIT, $0-48
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R2
+    MOVD a_base+24(FP), R1
+
+    // Load 1.0 into F3 and broadcast
+    FMOVS $1.0, F3
+    WORD $0x4E040463           // DUP V3.4S, V3.S[0]
+
+    LSR $2, R2, R3
+    CBZ R3, recip32_scalar
+
+recip32_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    WORD $0x6E20FC61           // FDIV V1.4S, V3.4S, V0.4S
+    VST1.P [V1.S4], 16(R0)
+    SUB $1, R3
+    CBNZ R3, recip32_loop4
+
+recip32_scalar:
+    AND $3, R2
+    CBZ R2, recip32_done
+
+recip32_loop1:
+    FMOVS (R1), F0
+    FDIVS F0, F3, F0           // F0 = 1.0 / a[i]
+    FMOVS F0, (R0)
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R2
+    CBNZ R2, recip32_loop1
+
+recip32_done:
+    RET
+
+// func addScaledNEON(dst []float32, alpha float32, s []float32)
+// dst[i] += alpha * s[i] - AXPY operation
+TEXT ·addScaledNEON(SB), NOSPLIT, $0-52
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R2
+    FMOVS alpha+24(FP), F3
+    MOVD s_base+32(FP), R1
+
+    // Broadcast alpha to all 4 lanes
+    WORD $0x4E040463           // DUP V3.4S, V3.S[0]
+
+    LSR $2, R2, R3
+    CBZ R3, addscaled32_scalar
+
+addscaled32_loop4:
+    VLD1 (R0), [V0.S4]         // Load dst[i:i+4]
+    VLD1.P 16(R1), [V1.S4]     // Load s[i:i+4]
+    WORD $0x4E23CC20           // FMLA V0.4S, V1.4S, V3.4S  (dst += s * alpha)
+    VST1.P [V0.S4], 16(R0)
+    SUB $1, R3
+    CBNZ R3, addscaled32_loop4
+
+addscaled32_scalar:
+    AND $3, R2
+    CBZ R2, addscaled32_done
+
+addscaled32_loop1:
+    FMOVS (R0), F0
+    FMOVS (R1), F1
+    FMADDS F3, F0, F1, F0      // dst += s * alpha (Go: Fm, Fa, Fn, Fd -> Fd = Fn*Fm + Fa)
+    FMOVS F0, (R0)
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R2
+    CBNZ R2, addscaled32_loop1
+
+addscaled32_done:
+    RET

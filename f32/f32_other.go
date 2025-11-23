@@ -19,10 +19,16 @@ func clamp32(dst, a []float32, minVal, maxVal float32) { clampGo(dst, a, minVal,
 func dotProductBatch32(results []float32, rows [][]float32, vec []float32) {
 	dotProductBatch32Go(results, rows, vec)
 }
-func convolveValid32(dst, signal, kernel []float32) { convolveValid32Go(dst, signal, kernel) }
-func accumulateAdd32(dst, src []float32)            { accumulateAdd32Go(dst, src) }
-func interleave2_32(dst, a, b []float32)            { interleave2Go(dst, a, b) }
-func deinterleave2_32(a, b, src []float32)          { deinterleave2Go(a, b, src) }
+func convolveValid32(dst, signal, kernel []float32)         { convolveValid32Go(dst, signal, kernel) }
+func accumulateAdd32(dst, src []float32)                    { accumulateAdd32Go(dst, src) }
+func interleave2_32(dst, a, b []float32)                    { interleave2Go(dst, a, b) }
+func deinterleave2_32(a, b, src []float32)                  { deinterleave2Go(a, b, src) }
+func sqrt32(dst, a []float32)                               { sqrt32Go(dst, a) }
+func reciprocal32(dst, a []float32)                         { reciprocal32Go(dst, a) }
+func minIdx32(a []float32) int                              { return minIdxGo(a) }
+func maxIdx32(a []float32) int                              { return maxIdxGo(a) }
+func addScaled32(dst []float32, alpha float32, s []float32) { addScaledGo(dst, alpha, s) }
+func cumulativeSum32(dst, a []float32)                      { cumulativeSum32Go(dst, a) }
 func convolveValidMulti32(dsts [][]float32, signal []float32, kernels [][]float32, n, kLen int) {
 	convolveValidMultiGo(dsts, signal, kernels, n, kLen)
 }
