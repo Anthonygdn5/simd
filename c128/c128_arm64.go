@@ -64,14 +64,6 @@ func absSq128(dst []float64, a []complex128) {
 	absSqGo(dst, a)
 }
 
-func phase128(dst []float64, a []complex128) {
-	if hasNEON && len(dst) >= 1 {
-		phaseNEON(dst, a)
-		return
-	}
-	phaseGo(dst, a)
-}
-
 func conj128(dst, a []complex128) {
 	if hasNEON && len(dst) >= 1 {
 		conjNEON(dst, a)
@@ -100,9 +92,6 @@ func absNEON(dst []float64, a []complex128)
 
 //go:noescape
 func absSqNEON(dst []float64, a []complex128)
-
-//go:noescape
-func phaseNEON(dst []float64, a []complex128)
 
 //go:noescape
 func conjNEON(dst, a []complex128)

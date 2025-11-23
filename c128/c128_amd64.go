@@ -29,7 +29,6 @@ var (
 	subImpl     binaryOpFunc
 	absImpl     unaryAbsFunc
 	absSqImpl   unaryAbsFunc
-	phaseImpl   unaryAbsFunc
 	conjImpl    unaryConjFunc
 )
 
@@ -56,7 +55,6 @@ func initAVX512() {
 	subImpl = subAVX512
 	absImpl = absAVX512
 	absSqImpl = absSqAVX512
-	phaseImpl = phaseAVX512
 	conjImpl = conjAVX512
 }
 
@@ -68,7 +66,6 @@ func initAVX() {
 	subImpl = subAVX
 	absImpl = absAVX
 	absSqImpl = absSqAVX
-	phaseImpl = phaseAVX
 	conjImpl = conjAVX
 }
 
@@ -80,7 +77,6 @@ func initSSE2() {
 	subImpl = subSSE2
 	absImpl = absSSE2
 	absSqImpl = absSqSSE2
-	phaseImpl = phaseSSE2
 	conjImpl = conjSSE2
 }
 
@@ -92,7 +88,6 @@ func initGo() {
 	subImpl = subGo
 	absImpl = absGo
 	absSqImpl = absSqGo
-	phaseImpl = phaseGo
 	conjImpl = conjGo
 }
 
@@ -124,10 +119,6 @@ func abs128(dst []float64, a []complex128) {
 
 func absSq128(dst []float64, a []complex128) {
 	absSqImpl(dst, a)
-}
-
-func phase128(dst []float64, a []complex128) {
-	phaseImpl(dst, a)
 }
 
 func conj128(dst, a []complex128) {
@@ -206,17 +197,6 @@ func absSqAVX(dst []float64, a []complex128)
 
 //go:noescape
 func absSqSSE2(dst []float64, a []complex128)
-
-// Phase assembly function declarations
-
-//go:noescape
-func phaseAVX512(dst []float64, a []complex128)
-
-//go:noescape
-func phaseAVX(dst []float64, a []complex128)
-
-//go:noescape
-func phaseSSE2(dst []float64, a []complex128)
 
 // Conj assembly function declarations
 

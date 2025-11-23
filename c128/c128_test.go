@@ -256,7 +256,7 @@ func BenchmarkScale(b *testing.B) {
 }
 
 // ============================================================================
-// Tests for new functions: Abs, AbsSq, Phase, Conj
+// Tests for new functions: Abs, AbsSq, Conj
 // ============================================================================
 
 func TestAbs(t *testing.T) {

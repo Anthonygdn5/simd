@@ -64,15 +64,6 @@ func absSqGo(dst []float64, a []complex128) {
 	}
 }
 
-// phaseGo computes element-wise phase angle: atan2(imag, real).
-func phaseGo(dst []float64, a []complex128) {
-	for i := range dst {
-		r := real(a[i])
-		im := imag(a[i])
-		dst[i] = math.Atan2(im, r)
-	}
-}
-
 // conjGo computes element-wise complex conjugate: conj(a + bi) = a - bi.
 func conjGo(dst, a []complex128) {
 	for i := range dst {

@@ -99,20 +99,6 @@ func AbsSq(dst []float64, a []complex128) {
 	absSq128(dst[:n], a[:n])
 }
 
-// Phase computes element-wise phase angle: dst[i] = atan2(imag(a[i]), real(a[i])).
-// Processes min(len(dst), len(a)) elements.
-//
-// Phase: arg(a + bi) = atan2(b, a)
-//
-// This is useful for phase-aware audio processing and reconstruction.
-func Phase(dst []float64, a []complex128) {
-	n := min(len(dst), len(a))
-	if n == 0 {
-		return
-	}
-	phase128(dst[:n], a[:n])
-}
-
 // Conj computes element-wise complex conjugate: dst[i] = conj(a[i]).
 // Processes min(len(dst), len(a)) elements.
 //

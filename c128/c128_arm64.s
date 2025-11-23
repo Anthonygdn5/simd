@@ -275,16 +275,6 @@ abssq_neon_done:
     RET
 
 // ============================================================================
-// PHASE - PHASE ANGLE: atan2(imag, real)
-// ============================================================================
-// Note: atan2 is not available as NEON instruction
-// This is a stub that falls back to Go implementation
-
-// func phaseNEON(dst []float64, a []complex128)
-TEXT ·phaseNEON(SB), NOSPLIT, $0-56
-    B ·phaseGo(SB)
-
-// ============================================================================
 // CONJ - COMPLEX CONJUGATE: conj(a + bi) = a - bi
 // ============================================================================
 
