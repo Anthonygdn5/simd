@@ -977,8 +977,8 @@ func TestEuclideanDistance(t *testing.T) {
 	}{
 		{"empty", nil, nil, 0},
 		{"same", []float32{1, 2, 3}, []float32{1, 2, 3}, 0},
-		{"2d", []float32{0, 0}, []float32{3, 4}, 5},                       // 3-4-5 triangle
-		{"3d", []float32{1, 2, 3}, []float32{4, 6, 8}, float32(math.Sqrt(50))}, // sqrt(9+16+25)
+		{"2d", []float32{0, 0}, []float32{3, 4}, 5},                              // 3-4-5 triangle
+		{"3d", []float32{1, 2, 3}, []float32{4, 6, 8}, float32(math.Sqrt(50))},   // sqrt(9+16+25)
 		{"negative", []float32{-1, -2}, []float32{1, 2}, float32(math.Sqrt(20))}, // sqrt(4+16)
 	}
 
