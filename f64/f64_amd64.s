@@ -228,12 +228,65 @@ mul_avx_done:
     RET
 
 // func divAVX(dst, a, b []float64)
+//
+// Division Latency Hiding via 4x Loop Unrolling
+// =============================================
+// VDIVPD has high latency (~13 cycles) but good throughput (~8 cycles).
+// This means the CPU can have multiple divisions in-flight simultaneously.
+// By issuing 4 independent VDIVPD instructions per iteration, we allow
+// the CPU's out-of-order execution to overlap their execution, achieving
+// closer to the theoretical throughput limit.
+//
+// Without unrolling: Each iteration waits for previous VDIVPD to complete
+// With 4x unrolling: 4 VDIVPDs can execute in parallel across iterations
+//
+// Timing (Alder Lake P-core, from uops.info):
+//   - VDIVPD YMM latency: ≤13 cycles
+//   - VDIVPD YMM throughput: 8.00 cycles (can start new div every 8 cycles)
+//
 TEXT ·divAVX(SB), NOSPLIT, $0-72
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
     MOVQ b_base+48(FP), DI
 
+    // Process 16 elements per iteration (4 vectors × 4 doubles)
+    // This allows 4 independent VDIVPD operations to be in-flight
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   div_avx_loop4_check
+
+div_avx_loop16:
+    // Load 4 vectors from a (128 bytes total)
+    VMOVUPD 0(SI), Y0
+    VMOVUPD 32(SI), Y2
+    VMOVUPD 64(SI), Y4
+    VMOVUPD 96(SI), Y6
+    // Load 4 vectors from b (128 bytes total)
+    VMOVUPD 0(DI), Y1
+    VMOVUPD 32(DI), Y3
+    VMOVUPD 64(DI), Y5
+    VMOVUPD 96(DI), Y7
+    // Issue 4 independent divisions - no data dependencies between them
+    // CPU can execute these in parallel using pipelined divider unit
+    VDIVPD Y1, Y0, Y0
+    VDIVPD Y3, Y2, Y2
+    VDIVPD Y5, Y4, Y4
+    VDIVPD Y7, Y6, Y6
+    // Store results (128 bytes total)
+    VMOVUPD Y0, 0(DX)
+    VMOVUPD Y2, 32(DX)
+    VMOVUPD Y4, 64(DX)
+    VMOVUPD Y6, 96(DX)
+    ADDQ $128, SI
+    ADDQ $128, DI
+    ADDQ $128, DX
+    DECQ AX
+    JNZ  div_avx_loop16
+
+div_avx_loop4_check:
+    // Handle remaining 4-element chunks
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   div_avx_remainder
@@ -654,11 +707,54 @@ clamp_avx_done:
     RET
 
 // func sqrtAVX(dst, a []float64)
+//
+// Square Root Latency Hiding via 4x Loop Unrolling
+// =================================================
+// VSQRTPD has high latency (~13 cycles) but good throughput (~9 cycles).
+// Similar to division, we can have multiple sqrt operations in-flight.
+// By issuing 4 independent VSQRTPD instructions per iteration, the CPU's
+// pipelined execution unit can process them concurrently.
+//
+// Timing (Alder Lake P-core, from uops.info):
+//   - VSQRTPD YMM latency: ≤13 cycles
+//   - VSQRTPD YMM throughput: 9.00 cycles (can start new sqrt every 9 cycles)
+//
 TEXT ·sqrtAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
+    // Process 16 elements per iteration (4 vectors × 4 doubles)
+    // This allows 4 independent VSQRTPD operations to overlap
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   sqrt_avx_loop4_check
+
+sqrt_avx_loop16:
+    // Load 4 vectors from source (128 bytes total)
+    VMOVUPD 0(SI), Y0
+    VMOVUPD 32(SI), Y2
+    VMOVUPD 64(SI), Y4
+    VMOVUPD 96(SI), Y6
+    // Issue 4 independent sqrts - no data dependencies between them
+    // CPU can execute these in parallel using pipelined sqrt unit
+    VSQRTPD Y0, Y0
+    VSQRTPD Y2, Y2
+    VSQRTPD Y4, Y4
+    VSQRTPD Y6, Y6
+    // Store results (128 bytes total)
+    VMOVUPD Y0, 0(DX)
+    VMOVUPD Y2, 32(DX)
+    VMOVUPD Y4, 64(DX)
+    VMOVUPD Y6, 96(DX)
+    ADDQ $128, SI
+    ADDQ $128, DX
+    DECQ AX
+    JNZ  sqrt_avx_loop16
+
+sqrt_avx_loop4_check:
+    // Handle remaining 4-element chunks
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   sqrt_avx_remainder
@@ -690,16 +786,62 @@ sqrt_avx_done:
     RET
 
 // func reciprocalAVX(dst, a []float64)
+//
+// Reciprocal via Division with Latency Hiding
+// ============================================
+// Computes 1.0/a[i] using VDIVPD. While approximate reciprocal instructions
+// exist (VRCPPS for float32), they only provide ~12-bit precision. For full
+// IEEE 754 precision, we use actual division with 1.0 as the dividend.
+//
+// Same latency hiding strategy as divAVX: 4x unrolling allows 4 independent
+// VDIVPD operations to overlap, hiding the ~13 cycle latency.
+//
+// Timing (Alder Lake P-core, from uops.info):
+//   - VDIVPD YMM latency: ≤13 cycles
+//   - VDIVPD YMM throughput: 8.00 cycles
+//
 TEXT ·reciprocalAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
-    // Load 1.0 for division
-    MOVQ $0x3FF0000000000000, AX  // 1.0 in IEEE 754
+    // Broadcast 1.0 to Y3 (preserved across all iterations)
+    // 0x3FF0000000000000 is 1.0 in IEEE 754 double precision
+    MOVQ $0x3FF0000000000000, AX
     MOVQ AX, X3
     VBROADCASTSD X3, Y3
 
+    // Process 16 elements per iteration (4 vectors × 4 doubles)
+    // This allows 4 independent VDIVPD operations to be in-flight
+    MOVQ CX, AX
+    SHRQ $4, AX                // len / 16
+    JZ   recip_avx_loop4_check
+
+recip_avx_loop16:
+    // Load 4 vectors from source (128 bytes total)
+    VMOVUPD 0(SI), Y0
+    VMOVUPD 32(SI), Y1
+    VMOVUPD 64(SI), Y2
+    VMOVUPD 96(SI), Y4
+    // Issue 4 independent divisions: dst[i] = 1.0 / a[i]
+    // No data dependencies - CPU can execute in parallel
+    VDIVPD Y0, Y3, Y0
+    VDIVPD Y1, Y3, Y1
+    VDIVPD Y2, Y3, Y2
+    VDIVPD Y4, Y3, Y4
+    // Store results (128 bytes total)
+    VMOVUPD Y0, 0(DX)
+    VMOVUPD Y1, 32(DX)
+    VMOVUPD Y2, 64(DX)
+    VMOVUPD Y4, 96(DX)
+    ADDQ $128, SI
+    ADDQ $128, DX
+    DECQ AX
+    JNZ  recip_avx_loop16
+
+recip_avx_loop4_check:
+    // Handle remaining 4-element chunks
+    ANDQ $15, CX
     MOVQ CX, AX
     SHRQ $2, AX
     JZ   recip_avx_remainder
@@ -1120,12 +1262,48 @@ mul_512_done:
     RET
 
 // func divAVX512(dst, a, b []float64)
+// Optimized with 4x unrolling to hide VDIVPD latency.
 TEXT ·divAVX512(SB), NOSPLIT, $0-72
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
     MOVQ b_base+48(FP), DI
 
+    // Process 32 elements per iteration (4 vectors × 8 doubles)
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   div_512_loop8_check
+
+div_512_loop32:
+    // Load 4 vectors from a
+    VMOVUPD 0(SI), Z0
+    VMOVUPD 64(SI), Z2
+    VMOVUPD 128(SI), Z4
+    VMOVUPD 192(SI), Z6
+    // Load 4 vectors from b
+    VMOVUPD 0(DI), Z1
+    VMOVUPD 64(DI), Z3
+    VMOVUPD 128(DI), Z5
+    VMOVUPD 192(DI), Z7
+    // Issue 4 independent divisions
+    VDIVPD Z1, Z0, Z0
+    VDIVPD Z3, Z2, Z2
+    VDIVPD Z5, Z4, Z4
+    VDIVPD Z7, Z6, Z6
+    // Store results
+    VMOVUPD Z0, 0(DX)
+    VMOVUPD Z2, 64(DX)
+    VMOVUPD Z4, 128(DX)
+    VMOVUPD Z6, 192(DX)
+    ADDQ $256, SI
+    ADDQ $256, DI
+    ADDQ $256, DX
+    DECQ AX
+    JNZ  div_512_loop32
+
+div_512_loop8_check:
+    // Handle remaining 8-element chunks
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   div_512_remainder
@@ -1551,11 +1729,41 @@ clamp_512_done:
     RET
 
 // func sqrtAVX512(dst, a []float64)
+// Optimized with 4x unrolling to hide VSQRTPD latency.
 TEXT ·sqrtAVX512(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
+    // Process 32 elements per iteration (4 vectors × 8 doubles)
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   sqrt_512_loop8_check
+
+sqrt_512_loop32:
+    // Load 4 vectors
+    VMOVUPD 0(SI), Z0
+    VMOVUPD 64(SI), Z2
+    VMOVUPD 128(SI), Z4
+    VMOVUPD 192(SI), Z6
+    // Issue 4 independent sqrts
+    VSQRTPD Z0, Z0
+    VSQRTPD Z2, Z2
+    VSQRTPD Z4, Z4
+    VSQRTPD Z6, Z6
+    // Store results
+    VMOVUPD Z0, 0(DX)
+    VMOVUPD Z2, 64(DX)
+    VMOVUPD Z4, 128(DX)
+    VMOVUPD Z6, 192(DX)
+    ADDQ $256, SI
+    ADDQ $256, DX
+    DECQ AX
+    JNZ  sqrt_512_loop32
+
+sqrt_512_loop8_check:
+    // Handle remaining 8-element chunks
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   sqrt_512_remainder
@@ -1587,15 +1795,46 @@ sqrt_512_done:
     RET
 
 // func reciprocalAVX512(dst, a []float64)
+// Optimized with 4x unrolling to hide VDIVPD latency.
 TEXT ·reciprocalAVX512(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
+    // Load 1.0 for division
     MOVQ $0x3FF0000000000000, AX
     MOVQ AX, X3
     VBROADCASTSD X3, Z3
 
+    // Process 32 elements per iteration (4 vectors × 8 doubles)
+    MOVQ CX, AX
+    SHRQ $5, AX                // len / 32
+    JZ   recip_512_loop8_check
+
+recip_512_loop32:
+    // Load 4 vectors
+    VMOVUPD 0(SI), Z0
+    VMOVUPD 64(SI), Z1
+    VMOVUPD 128(SI), Z2
+    VMOVUPD 192(SI), Z4
+    // Issue 4 independent divisions
+    VDIVPD Z0, Z3, Z0
+    VDIVPD Z1, Z3, Z1
+    VDIVPD Z2, Z3, Z2
+    VDIVPD Z4, Z3, Z4
+    // Store results
+    VMOVUPD Z0, 0(DX)
+    VMOVUPD Z1, 64(DX)
+    VMOVUPD Z2, 128(DX)
+    VMOVUPD Z4, 192(DX)
+    ADDQ $256, SI
+    ADDQ $256, DX
+    DECQ AX
+    JNZ  recip_512_loop32
+
+recip_512_loop8_check:
+    // Handle remaining 8-element chunks
+    ANDQ $31, CX
     MOVQ CX, AX
     SHRQ $3, AX
     JZ   recip_512_remainder
