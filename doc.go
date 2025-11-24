@@ -40,15 +40,17 @@
 //
 // # Available Operations
 //
-// Core arithmetic: Add, Sub, Mul, Div, Scale, AddScalar, MulAddScalar
+// Core arithmetic: Add, Sub, Mul, Div, Scale, AddScalar, AddScaled, FMA
 //
-// Reductions: Sum, DotProduct, Min, Max, Mean, Variance, Norm
+// Reductions: Sum, DotProduct, DotProductBatch, Min, Max, MinIdx, MaxIdx
 //
-// Element-wise: Abs, Neg, Sqrt, Round, Floor, Ceil, Clamp
+// Statistics: Mean, Variance, StdDev, EuclideanDistance, Normalize
 //
-// Audio DSP: Interleave2, Deinterleave2, ConvolveValid, ConvolveValidMulti
+// Element-wise: Abs, Neg, Sqrt, Reciprocal, Clamp
 //
-// Complex (c128): Add, Sub, Mul, Conj, Abs, Scale, DotProduct
+// Audio DSP: Interleave2, Deinterleave2, ConvolveValid, ConvolveValidMulti, AccumulateAdd, CumulativeSum
+//
+// Complex (c128): Add, Sub, Mul, MulConj, Conj, Abs, AbsSq, Scale
 //
 // # Design Principles
 //
