@@ -337,19 +337,34 @@ func sigmoid64(dst, src []float64) {
 }
 
 func relu64(dst, src []float64) {
-	// Use Go implementation for now, can optimize with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		reluAVX(dst, src)
+		return
+	}
 	relu64Go(dst, src)
 }
 
+//go:noescape
+func reluAVX(dst, src []float64)
+
 func clampScale64(dst, src []float64, minVal, maxVal, scale float64) {
-	// Use Go implementation for now, can optimize with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		clampScaleAVX(dst, src, minVal, maxVal, scale)
+		return
+	}
 	clampScale64Go(dst, src, minVal, maxVal, scale)
 }
 
 func tanh64(dst, src []float64) {
-	// Use Go implementation for now, can optimize with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		tanhAVX(dst, src)
+		return
+	}
 	tanh64Go(dst, src)
 }
+
+//go:noescape
+func tanhAVX(dst, src []float64)
 
 func exp64(dst, src []float64) {
 	// Exp is complex, use Go implementation with math.Exp for now
@@ -403,6 +418,9 @@ func fmaAVX(dst, a, b, c []float64)
 
 //go:noescape
 func clampAVX(dst, a []float64, minVal, maxVal float64)
+
+//go:noescape
+func clampScaleAVX(dst, src []float64, minVal, maxVal, scale float64)
 
 //go:noescape
 func sqrtAVX(dst, a []float64)

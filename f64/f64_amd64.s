@@ -3242,3 +3242,141 @@ sigmoid64_scalar:
 sigmoid64_done:
     VZEROUPPER
     RET
+
+// func clampScaleAVX(dst, src []float64, minVal, maxVal, scale float64)
+// Performs fused clamp and scale: dst[i] = (clamp(src[i], minVal, maxVal) - minVal) * scale
+TEXT ·clampScaleAVX(SB), NOSPLIT, $0-68
+    MOVQ dst_base+0(FP), DX
+    MOVQ dst_len+8(FP), CX
+    MOVQ src_base+24(FP), SI
+    VBROADCASTSD minVal+48(FP), Y1     // Y1 = minVal (broadcast to all lanes)
+    VBROADCASTSD maxVal+56(FP), Y2     // Y2 = maxVal
+    VBROADCASTSD scale+64(FP), Y3      // Y3 = scale
+
+    // Process 4 elements per iteration
+    MOVQ CX, AX
+    SHRQ $2, AX                        // len / 4
+    JZ   clampscale64_remainder
+
+clampscale64_loop4:
+    VMOVUPD (SI), Y0                   // Y0 = src[i]
+    VMAXPD Y0, Y1, Y0                  // Y0 = max(src[i], minVal)
+    VMINPD Y0, Y2, Y0                  // Y0 = min(max(src[i], minVal), maxVal)
+    VSUBPD Y1, Y0, Y0                  // Y0 = clamped - minVal
+    VMULPD Y3, Y0, Y0                  // Y0 = (clamped - minVal) * scale
+    VMOVUPD Y0, (DX)                   // store result
+    ADDQ $32, SI
+    ADDQ $32, DX
+    DECQ AX
+    JNZ  clampscale64_loop4
+
+clampscale64_remainder:
+    ANDQ $3, CX                        // remainder = len % 4
+    JZ   clampscale64_done
+    VMOVSD minVal+48(FP), X1           // X1 = minVal (scalar)
+    VMOVSD maxVal+56(FP), X2           // X2 = maxVal
+    VMOVSD scale+64(FP), X3            // X3 = scale
+
+clampscale64_scalar:
+    VMOVSD (SI), X0                    // X0 = src[i]
+    VMAXSD X0, X1, X0                  // X0 = max(src[i], minVal)
+    VMINSD X0, X2, X0                  // X0 = min(max(src[i], minVal), maxVal)
+    VSUBSD X1, X0, X0                  // X0 = clamped - minVal
+    VMULSD X3, X0, X0                  // X0 = (clamped - minVal) * scale
+    VMOVSD X0, (DX)                    // store result
+    ADDQ $8, SI
+    ADDQ $8, DX
+    DECQ CX
+    JNZ  clampscale64_scalar
+
+clampscale64_done:
+    VZEROUPPER
+    RET
+
+// func reluAVX(dst, src []float64)
+// Computes ReLU: dst[i] = max(0, src[i])
+TEXT ·reluAVX(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), DX
+    MOVQ dst_len+8(FP), CX
+    MOVQ src_base+24(FP), SI
+
+    // Create zero vector
+    VXORPD Y1, Y1, Y1                  // Y1 = 0
+
+    // Process 4 elements per iteration
+    MOVQ CX, AX
+    SHRQ $2, AX                        // len / 4
+    JZ   relu64_remainder
+
+relu64_loop4:
+    VMOVUPD (SI), Y0                   // Y0 = src[i]
+    VMAXPD Y0, Y1, Y0                  // Y0 = max(src[i], 0)
+    VMOVUPD Y0, (DX)                   // store result
+    ADDQ $32, SI
+    ADDQ $32, DX
+    DECQ AX
+    JNZ  relu64_loop4
+
+relu64_remainder:
+    ANDQ $3, CX                        // remainder = len % 4
+    JZ   relu64_done
+    VXORPD X1, X1, X1                  // X1 = 0 (scalar)
+
+relu64_scalar:
+    VMOVSD (SI), X0                    // X0 = src[i]
+    VMAXSD X0, X1, X0                  // X0 = max(src[i], 0)
+    VMOVSD X0, (DX)                    // store result
+    ADDQ $8, SI
+    ADDQ $8, DX
+    DECQ CX
+    JNZ  relu64_scalar
+
+relu64_done:
+    VZEROUPPER
+    RET
+
+// func tanhAVX(dst, src []float64)
+// Computes fast tanh approximation: tanh(x) ≈ x / (1 + |x|)
+TEXT ·tanhAVX(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), DX
+    MOVQ dst_len+8(FP), CX
+    MOVQ src_base+24(FP), SI
+
+    // Load constants
+    VMOVAPD sigmoid_one64<>(SB), Y2    // Y2 = 1.0 (reuse existing constant)
+    VMOVAPD absf64mask<>(SB), Y3       // Y3 = abs mask
+
+    // Process 4 elements per iteration
+    MOVQ CX, AX
+    SHRQ $2, AX                        // len / 4
+    JZ   tanh64_remainder
+
+tanh64_loop4:
+    VMOVUPD (SI), Y0                   // Y0 = x
+    VANDPD Y3, Y0, Y1                  // Y1 = |x|
+    VADDPD Y2, Y1, Y1                  // Y1 = 1 + |x|
+    VDIVPD Y1, Y0, Y0                  // Y0 = x / (1 + |x|)
+    VMOVUPD Y0, (DX)                   // store result
+    ADDQ $32, SI
+    ADDQ $32, DX
+    DECQ AX
+    JNZ  tanh64_loop4
+
+tanh64_remainder:
+    ANDQ $3, CX                        // remainder = len % 4
+    JZ   tanh64_done
+
+tanh64_scalar:
+    VMOVSD (SI), X0                    // X0 = x
+    VANDPD X3, X0, X1                  // X1 = |x|
+    VADDSD X2, X1, X1                  // X1 = 1 + |x|
+    VDIVSD X1, X0, X0                  // X0 = x / (1 + |x|)
+    VMOVSD X0, (DX)                    // store result
+    ADDQ $8, SI
+    ADDQ $8, DX
+    DECQ CX
+    JNZ  tanh64_scalar
+
+tanh64_done:
+    VZEROUPPER
+    RET

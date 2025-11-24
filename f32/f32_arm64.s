@@ -1128,3 +1128,51 @@ tanh32_neon_scalar_loop:
 
 tanh32_neon_done:
     RET
+
+// func clampScaleNEON(dst, src []float32, minVal, maxVal, scale float32)
+// Performs fused clamp and scale: dst[i] = (clamp(src[i], minVal, maxVal) - minVal) * scale
+TEXT ·clampScaleNEON(SB), NOSPLIT, $0-60
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD src_base+24(FP), R1
+    FMOVS minVal+48(FP), F4
+    FMOVS maxVal+52(FP), F5
+    FMOVS scale+56(FP), F6
+
+    // Duplicate scalars to SIMD vectors
+    WORD $0x4E040484                  // DUP V4.4S, V4.S[0] -> V4 = minVal
+    WORD $0x4E0404A5                  // DUP V5.4S, V5.S[0] -> V5 = maxVal
+    WORD $0x4E0404C6                  // DUP V6.4S, V6.S[0] -> V6 = scale
+
+    // Process 4 elements per iteration
+    LSR $2, R3, R4
+    CBZ R4, clampscale32_neon_scalar
+
+clampscale32_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]            // V0 = src[i]
+    WORD $0x4E24F400                  // FMAX V0.4S, V0.4S, V4.4S -> clamp to min
+    WORD $0x4EA5F400                  // FMIN V0.4S, V0.4S, V5.4S -> clamp to max
+    WORD $0x4EA4D400                  // FSUB V0.4S, V0.4S, V4.4S -> subtract minVal
+    WORD $0x6E26DC00                  // FMUL V0.4S, V0.4S, V6.4S -> multiply by scale
+    VST1.P [V0.S4], 16(R0)            // store result
+    SUB $1, R4
+    CBNZ R4, clampscale32_neon_loop4
+
+clampscale32_neon_scalar:
+    AND $3, R3
+    CBZ R3, clampscale32_neon_done
+
+clampscale32_neon_scalar_loop:
+    FMOVS (R1), F0                    // F0 = src[i]
+    FMAXS F0, F4, F0                  // F0 = max(src[i], minVal)
+    FMINS F0, F5, F0                  // F0 = min(max(src[i], minVal), maxVal)
+    FSUBS F4, F0, F0                  // F0 = clamped - minVal
+    FMULS F0, F6, F0                  // F0 = (clamped - minVal) * scale
+    FMOVS F0, (R0)                    // store result
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R3
+    CBNZ R3, clampscale32_neon_scalar_loop
+
+clampscale32_neon_done:
+    RET

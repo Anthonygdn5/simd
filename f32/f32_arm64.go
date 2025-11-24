@@ -313,8 +313,15 @@ func relu32(dst, src []float32) {
 func reluNEON(dst, src []float32)
 
 func clampScale32(dst, src []float32, minVal, maxVal, scale float32) {
+	if hasNEON && len(dst) >= 4 {
+		clampScaleNEON(dst, src, minVal, maxVal, scale)
+		return
+	}
 	clampScale32Go(dst, src, minVal, maxVal, scale)
 }
+
+//go:noescape
+func clampScaleNEON(dst, src []float32, minVal, maxVal, scale float32)
 
 func tanh32(dst, src []float32) {
 	if hasNEON && len(dst) >= 4 {

@@ -342,6 +342,9 @@ func fmaAVX(dst, a, b, c []float32)
 func clampAVX(dst, a []float32, minVal, maxVal float32)
 
 //go:noescape
+func clampScaleAVX(dst, src []float32, minVal, maxVal, scale float32)
+
+//go:noescape
 func sqrtAVX(dst, a []float32)
 
 //go:noescape
@@ -500,20 +503,34 @@ func sigmoid32(dst, src []float32) {
 func sigmoidAVX(dst, src []float32)
 
 func relu32(dst, src []float32) {
-	// ReLU is simple enough that SIMD helps even with Go fallback initially
-	// Can be optimized with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		reluAVX(dst, src)
+		return
+	}
 	relu32Go(dst, src)
 }
 
+//go:noescape
+func reluAVX(dst, src []float32)
+
 func clampScale32(dst, src []float32, minVal, maxVal, scale float32) {
-	// Use Go implementation for now, can optimize with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		clampScaleAVX(dst, src, minVal, maxVal, scale)
+		return
+	}
 	clampScale32Go(dst, src, minVal, maxVal, scale)
 }
 
 func tanh32(dst, src []float32) {
-	// Use Go implementation for now, can optimize with AVX later
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		tanhAVX(dst, src)
+		return
+	}
 	tanh32Go(dst, src)
 }
+
+//go:noescape
+func tanhAVX(dst, src []float32)
 
 func exp32(dst, src []float32) {
 	// Exp is complex, use Go implementation with math.Exp for now

@@ -310,8 +310,15 @@ func relu64(dst, src []float64) {
 }
 
 func clampScale64(dst, src []float64, minVal, maxVal, scale float64) {
+	if hasNEON && len(dst) >= 2 {
+		clampScaleNEON64(dst, src, minVal, maxVal, scale)
+		return
+	}
 	clampScale64Go(dst, src, minVal, maxVal, scale)
 }
+
+//go:noescape
+func clampScaleNEON64(dst, src []float64, minVal, maxVal, scale float64)
 
 func tanh64(dst, src []float64) {
 	if hasNEON && len(dst) >= 2 {

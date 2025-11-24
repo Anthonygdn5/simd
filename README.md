@@ -108,10 +108,10 @@ fmt.Println(cpu.HasNEON())   // true/false
 |                 | `CumulativeSum(dst, a)`             | Running sum                   | Sequential                          |
 | **Range**       | `Clamp(dst, a, min, max)`           | Clamp to range                | 8x / 4x / 2x                        |
 | **Activation**  | `Sigmoid(dst, src)`                 | Sigmoid: 1/(1+e^-x)           | 4x (AVX) / 2x (NEON)                |
-|                 | `ReLU(dst, src)`                    | Rectified Linear Unit         | 4x / 2x (NEON) / Pure Go            |
-|                 | `Tanh(dst, src)`                    | Hyperbolic tangent            | 4x / 2x (NEON) / Pure Go            |
+|                 | `ReLU(dst, src)`                    | Rectified Linear Unit         | 8x / 4x / 2x                        |
+|                 | `Tanh(dst, src)`                    | Hyperbolic tangent            | 8x / 4x / 2x                        |
 |                 | `Exp(dst, src)`                     | Exponential e^x               | Pure Go                             |
-|                 | `ClampScale(dst, src, min, max, s)` | Fused clamp and scale         | Pure Go                             |
+|                 | `ClampScale(dst, src, min, max, s)` | Fused clamp and scale         | 8x / 4x / 2x                        |
 | **Batch**       | `DotProductBatch(r, rows, v)`       | Multiple dot products         | 8x / 4x / 2x                        |
 | **Signal**      | `ConvolveValid(dst, sig, k)`        | FIR filter / convolution      | 8x / 4x / 2x                        |
 |                 | `ConvolveValidMulti(dsts, sig, ks)` | Multi-kernel convolution      | 8x / 4x / 2x                        |
