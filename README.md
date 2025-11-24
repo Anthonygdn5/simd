@@ -235,6 +235,29 @@ c128.Abs(magnitude, signalFFT)                  // Extract magnitude for display
 |                | Max        | 66        | 352     | **5.3x**  |
 | **Range**      | Clamp      | 47        | 701     | **14.8x** |
 
+#### Activation Functions - SIMD vs Pure Go
+
+**float32 (1024 elements):**
+
+| Function   | SIMD (ns) | Go (ns)  | Speedup    | SIMD Throughput |
+| ---------- | --------- | -------- | ---------- | --------------- |
+| Sigmoid    | 138       | 5906     | **43x**    | 59.3 GB/s       |
+| ReLU       | 39        | 662      | **17x**    | 211 GB/s        |
+| Tanh       | 138       | 28116    | **204x**   | 59.5 GB/s       |
+
+**float64 (1024 elements):**
+
+| Function   | SIMD (ns) | Go (ns)  | Speedup    | SIMD Throughput |
+| ---------- | --------- | -------- | ---------- | --------------- |
+| ReLU       | 68        | 646      | **9.5x**   | 240 GB/s        |
+| Tanh       | 445       | 6230     | **14x**    | 36.8 GB/s       |
+
+**Key Characteristics:**
+
+- **Tanh**: 200x+ speedup for f32 - fast approximation with saturation vs math.Tanh
+- **ReLU**: Highest throughput (211-240 GB/s) - simple max(0, x) operation
+- **Sigmoid**: 43x speedup for f32 - fast approximation with exponential
+
 #### Batch & Signal Processing (varied sizes)
 
 | Operation                | Config                | SIMD    | Go      | Speedup  |
