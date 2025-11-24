@@ -291,6 +291,7 @@ func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
 func cubicInterpDotNEON(hist, a, b, c, d []float32, x float32) float32
 
 func sigmoid32(dst, src []float32) {
+	// Assumes len(src) >= len(dst); caller ensures this via public API
 	if hasNEON && len(dst) >= 4 {
 		sigmoidNEON(dst, src)
 		return
@@ -302,6 +303,7 @@ func sigmoid32(dst, src []float32) {
 func sigmoidNEON(dst, src []float32)
 
 func relu32(dst, src []float32) {
+	// Assumes len(src) >= len(dst); caller ensures this via public API
 	if hasNEON && len(dst) >= 4 {
 		reluNEON(dst, src)
 		return
@@ -324,6 +326,7 @@ func clampScale32(dst, src []float32, minVal, maxVal, scale float32) {
 func clampScaleNEON(dst, src []float32, minVal, maxVal, scale float32)
 
 func tanh32(dst, src []float32) {
+	// Assumes len(src) >= len(dst); caller ensures this via public API
 	if hasNEON && len(dst) >= 4 {
 		tanhNEON(dst, src)
 		return

@@ -10,9 +10,9 @@ const (
 
 // Numerical stability thresholds
 const (
-	sigmoidClampThreshold = 20.0 // sigmoid(x > 20) ≈ 1, sigmoid(x < -20) ≈ 0
-	tanhClampThreshold    = 2.5  // tanh(x > 2.5) ≈ 1, tanh(x < -2.5) ≈ -1
-	expOverflowThreshold  = 88.0 // exp(88) ≈ max float32, prevents overflow
+	sigmoidClampThreshold = 20.0 // sigmoid(±20) ≈ 1.0 - 2e-9 (float precision limit)
+	tanhClampThreshold    = 2.5  // fast approximation threshold: tanh(±2.5) saturates to ±1
+	expOverflowThreshold  = 88.0 // exp(88.72) = max float32; clamp to prevent overflow
 )
 
 // Pure Go implementations
@@ -329,21 +329,11 @@ func clampScale32Go(dst, src []float32, minVal, maxVal, scale float32) {
 	}
 }
 
-// tanh32Go computes tanh(x) using fast approximation.
+// tanh32Go computes hyperbolic tangent using math.Tanh for accuracy.
+// This is the accurate implementation used as a fallback when SIMD is unavailable.
 func tanh32Go(dst, src []float32) {
 	for i := range dst {
-		x := src[i]
-		// Fast approximation: tanh(x) ≈ x / (1 + |x|) with clamping
-		switch {
-		case x > tanhClampThreshold:
-			dst[i] = 1.0
-		case x < -tanhClampThreshold:
-			dst[i] = -1.0
-		default:
-			// tanh(x) ≈ x / (1 + |x|) for moderate values
-			absX := float32(math.Abs(float64(x)))
-			dst[i] = x / (1.0 + absX)
-		}
+		dst[i] = float32(math.Tanh(float64(src[i])))
 	}
 }
 

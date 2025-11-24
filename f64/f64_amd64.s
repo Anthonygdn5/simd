@@ -3197,10 +3197,10 @@ TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
 
-    // Load constants
-    VMOVAPD sigmoid_half64<>(SB), Y8   // Y8 = 0.5
-    VMOVAPD sigmoid_one64<>(SB), Y9    // Y9 = 1.0
-    VMOVAPD absf64mask<>(SB), Y10      // Y10 = abs mask
+    // Load constants (use unaligned loads to avoid alignment faults)
+    VMOVUPD sigmoid_half64<>(SB), Y8   // Y8 = 0.5
+    VMOVUPD sigmoid_one64<>(SB), Y9    // Y9 = 1.0
+    VMOVUPD absf64mask<>(SB), Y10      // Y10 = abs mask
 
     // Process 4 elements per iteration
     MOVQ CX, AX
@@ -3245,7 +3245,7 @@ sigmoid64_done:
 
 // func clampScaleAVX(dst, src []float64, minVal, maxVal, scale float64)
 // Performs fused clamp and scale: dst[i] = (clamp(src[i], minVal, maxVal) - minVal) * scale
-TEXT ·clampScaleAVX(SB), NOSPLIT, $0-68
+TEXT ·clampScaleAVX(SB), NOSPLIT, $0-72
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
@@ -3342,9 +3342,9 @@ TEXT ·tanhAVX(SB), NOSPLIT, $0-48
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
 
-    // Load constants
-    VMOVAPD sigmoid_one64<>(SB), Y2    // Y2 = 1.0 (reuse existing constant)
-    VMOVAPD absf64mask<>(SB), Y3       // Y3 = abs mask
+    // Load constants (use unaligned loads to avoid alignment faults)
+    VMOVUPD sigmoid_one64<>(SB), Y2    // Y2 = 1.0 (reuse existing constant)
+    VMOVUPD absf64mask<>(SB), Y3       // Y3 = abs mask
 
     // Process 4 elements per iteration
     MOVQ CX, AX

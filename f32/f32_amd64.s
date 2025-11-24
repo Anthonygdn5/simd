@@ -2809,10 +2809,10 @@ TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
 
-    // Load constants
-    VMOVAPS sigmoid_half<>(SB), Y8   // Y8 = 0.5
-    VMOVAPS sigmoid_one<>(SB), Y9    // Y9 = 1.0
-    VMOVAPS absf32mask<>(SB), Y10    // Y10 = abs mask
+    // Load constants (use unaligned loads to avoid alignment faults)
+    VMOVUPS sigmoid_half<>(SB), Y8   // Y8 = 0.5
+    VMOVUPS sigmoid_one<>(SB), Y9    // Y9 = 1.0
+    VMOVUPS absf32mask<>(SB), Y10    // Y10 = abs mask
 
     // Process 8 elements per iteration
     MOVQ CX, AX
@@ -2954,9 +2954,9 @@ TEXT ·tanhAVX(SB), NOSPLIT, $0-48
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
 
-    // Load constants
-    VMOVAPS sigmoid_one<>(SB), Y2      // Y2 = 1.0 (reuse existing constant)
-    VMOVAPS absf32mask<>(SB), Y3       // Y3 = abs mask
+    // Load constants (use unaligned loads to avoid alignment faults)
+    VMOVUPS sigmoid_one<>(SB), Y2      // Y2 = 1.0 (reuse existing constant)
+    VMOVUPS absf32mask<>(SB), Y3       // Y3 = abs mask
 
     // Process 8 elements per iteration
     MOVQ CX, AX

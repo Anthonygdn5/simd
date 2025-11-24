@@ -489,8 +489,8 @@ func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
 func cubicInterpDotAVX(hist, a, b, c, d []float32, x float32) float32
 
 func sigmoid32(dst, src []float32) {
-	// Use AVX+FMA if available and have enough elements
-	if cpu.X86.AVX && cpu.X86.FMA && len(dst) >= minAVXElements {
+	// Use AVX+FMA if available and have enough elements on both slices
+	if cpu.X86.AVX && cpu.X86.FMA && len(dst) >= minAVXElements && len(src) >= minAVXElements {
 		sigmoidAVX(dst, src)
 		return
 	}
@@ -503,7 +503,7 @@ func sigmoid32(dst, src []float32) {
 func sigmoidAVX(dst, src []float32)
 
 func relu32(dst, src []float32) {
-	if cpu.X86.AVX && len(dst) >= minAVXElements {
+	if cpu.X86.AVX && len(dst) >= minAVXElements && len(src) >= minAVXElements {
 		reluAVX(dst, src)
 		return
 	}
@@ -522,7 +522,7 @@ func clampScale32(dst, src []float32, minVal, maxVal, scale float32) {
 }
 
 func tanh32(dst, src []float32) {
-	if cpu.X86.AVX && len(dst) >= minAVXElements {
+	if cpu.X86.AVX && len(dst) >= minAVXElements && len(src) >= minAVXElements {
 		tanhAVX(dst, src)
 		return
 	}

@@ -996,8 +996,7 @@ cubic32_neon_done:
 // func sigmoidNEON(dst, src []float32)
 // Implements fast sigmoid approximation: σ(x) ≈ 0.5 + 0.5 * x / (1 + |x|)
 // This approximation is SIMD-friendly and commonly used in neural networks.
-// Frame size: 56 bytes (8 bytes padding + 48 bytes params)
-TEXT ·sigmoidNEON(SB), NOSPLIT, $56-48
+TEXT ·sigmoidNEON(SB), NOSPLIT, $0-48
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R3
     MOVD src_base+24(FP), R1
@@ -1087,7 +1086,7 @@ relu32_neon_done:
 
 // func tanhNEON(dst, src []float32)
 // Computes fast tanh approximation: tanh(x) ≈ x / (1 + |x|)
-TEXT ·tanhNEON(SB), NOSPLIT, $56-48
+TEXT ·tanhNEON(SB), NOSPLIT, $0-48
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R3
     MOVD src_base+24(FP), R1
