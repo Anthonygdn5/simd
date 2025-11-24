@@ -11,7 +11,7 @@ A high-performance SIMD (Single Instruction, Multiple Data) library for Go provi
 - **Pure Go assembly** - Native Go assembler, simple cross-compilation
 - **Runtime CPU detection** - Automatically selects optimal implementation (AVX-512, AVX+FMA, SSE2, NEON, or pure Go)
 - **Zero allocations** - All operations work on pre-allocated slices
-- **39 operations** - Arithmetic, reduction, statistical, vector, signal processing, and complex number operations
+- **40 operations** - Arithmetic, reduction, statistical, vector, signal processing, and complex number operations
 - **Multi-architecture** - AMD64 (AVX-512/AVX+FMA/SSE2) and ARM64 (NEON) with pure Go fallback
 - **Thread-safe** - All functions are safe for concurrent use
 
@@ -113,6 +113,7 @@ fmt.Println(cpu.HasNEON())   // true/false
 |                 | `AccumulateAdd(dst, src, off)`      | Overlap-add: dst[off:] += src | 8x / 4x / 2x                        |
 | **Audio**       | `Interleave2(dst, a, b)`            | Pack stereo: [L,R,L,R,...]    | 4x / 2x                             |
 |                 | `Deinterleave2(a, b, src)`          | Unpack stereo to channels     | 4x / 2x                             |
+|                 | `CubicInterpDot(hist,a,b,c,d,x)`    | Fused cubic interp dot product| 4x / 2x                             |
 
 ### `f32` - float32 Operations
 
@@ -238,6 +239,8 @@ c128.Abs(magnitude, signalFFT)                  // Extract magnitude for display
 | ConvolveValid (f64)      | 4096 sig × 64 ker     | 26.6 µs | 169 µs  | **6.3x** |
 | ConvolveValid (f32)      | 4096 sig × 64 ker     | 17.9 µs | 80 µs   | **4.5x** |
 | ConvolveValidMulti (f64) | 1000 sig × 64 ker × 2 | 13.4 µs | -       | -        |
+| CubicInterpDot (f64)     | 241 taps              | 47 ns   | 88 ns   | **1.9x** |
+| CubicInterpDot (f32)     | 241 taps              | 21 ns   | 66 ns   | **3.1x** |
 | Interleave2 (f64)        | 1000 pairs            | 216 ns  | -       | -        |
 | Deinterleave2 (f64)      | 1000 pairs            | 216 ns  | -       | -        |
 | Interleave2 (f32)        | 1000 pairs            | 109 ns  | -       | -        |
@@ -247,8 +250,8 @@ c128.Abs(magnitude, signalFFT)                  // Extract magnitude for display
 
 | Package  | Average Speedup | Best         | Operations   |
 | -------- | --------------- | ------------ | ------------ |
-| **f32**  | **6.5x**        | 21.8x (Abs)  | 31 functions |
-| **f64**  | **3.2x**        | 7.9x (Clamp) | 31 functions |
+| **f32**  | **6.5x**        | 21.8x (Abs)  | 32 functions |
+| **f64**  | **3.2x**        | 7.9x (Clamp) | 32 functions |
 | **c128** | **1.77x**       | 2.2x (Mul)   | 8 functions  |
 
 ### ARM64 (Raspberry Pi 5, NEON)

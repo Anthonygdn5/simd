@@ -319,6 +319,14 @@ func addScaled64(dst []float64, alpha float64, s []float64) {
 	addScaledImpl(dst, alpha, s)
 }
 
+func cubicInterpDot64(hist, a, b, c, d []float64, x float64) float64 {
+	// Use AVX+FMA if available and have enough elements
+	if cpu.X86.AVX && cpu.X86.FMA && len(hist) >= minAVXElements {
+		return cubicInterpDotAVX(hist, a, b, c, d, x)
+	}
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}
+
 // AVX+FMA assembly function declarations (4x float64 per iteration)
 //
 //go:noescape
@@ -509,3 +517,8 @@ func interleave2SSE2(dst, a, b []float64)
 
 //go:noescape
 func deinterleave2SSE2(a, b, src []float64)
+
+// CubicInterpDot assembly function declaration
+//
+//go:noescape
+func cubicInterpDotAVX(hist, a, b, c, d []float64, x float64) float64

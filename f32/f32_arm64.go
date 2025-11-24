@@ -279,3 +279,13 @@ func varianceNEON32(a []float32, mean float32) float32
 
 //go:noescape
 func euclideanDistanceNEON32(a, b []float32) float32
+
+func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
+	if hasNEON && len(hist) >= 4 {
+		return cubicInterpDotNEON(hist, a, b, c, d, x)
+	}
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}
+
+//go:noescape
+func cubicInterpDotNEON(hist, a, b, c, d []float32, x float32) float32

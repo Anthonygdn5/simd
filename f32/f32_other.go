@@ -34,3 +34,6 @@ func convolveValidMulti32(dsts [][]float32, signal []float32, kernels [][]float3
 }
 func variance32(a []float32, mean float32) float32 { return variance32Go(a, mean) }
 func euclideanDistance32(a, b []float32) float32   { return euclideanDistance32Go(a, b) }
+func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}

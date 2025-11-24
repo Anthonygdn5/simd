@@ -643,3 +643,191 @@ func BenchmarkAddScaled_1000(b *testing.B) {
 		AddScaled(dst, 0.5, s)
 	}
 }
+
+// Tests for CubicInterpDot
+
+// cubicInterpDotRef is a reference implementation for testing
+func cubicInterpDotRef64(hist, a, b, c, d []float64, x float64) float64 {
+	var sum float64
+	for i := range hist {
+		coef := a[i] + x*(b[i]+x*(c[i]+x*d[i]))
+		sum += hist[i] * coef
+	}
+	return sum
+}
+
+func TestCubicInterpDot(t *testing.T) {
+	t.Logf("CPU: %s", cpu.Info())
+
+	tests := []struct {
+		name string
+		n    int
+		x    float64
+	}{
+		{"empty", 0, 0.5},
+		{"single", 1, 0.5},
+		{"two", 2, 0.5},
+		{"three", 3, 0.5},
+		{"four", 4, 0.5},       // NEON vector width
+		{"five", 5, 0.5},       // NEON + scalar remainder
+		{"eight", 8, 0.5},      // AVX vector width
+		{"nine", 9, 0.5},       // AVX + scalar remainder
+		{"sixteen", 16, 0.5},   // 2x AVX vectors
+		{"seventeen", 17, 0.5}, // 2x AVX + scalar remainder
+		{"x=0", 16, 0.0},       // Edge case: x=0 means only a[] matters
+		{"x=0.999", 16, 0.999}, // Near boundary
+		{"x=1", 16, 1.0},       // Edge case
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.n == 0 {
+				got := CubicInterpDot(nil, nil, nil, nil, nil, tt.x)
+				if got != 0 {
+					t.Errorf("CubicInterpDot(empty) = %v, want 0", got)
+				}
+				return
+			}
+
+			hist := make([]float64, tt.n)
+			a := make([]float64, tt.n)
+			b := make([]float64, tt.n)
+			c := make([]float64, tt.n)
+			d := make([]float64, tt.n)
+
+			for i := range tt.n {
+				hist[i] = float64(i+1) * 0.1
+				a[i] = float64(i) * 0.5
+				b[i] = float64(i) * 0.3
+				c[i] = float64(i) * 0.2
+				d[i] = float64(i) * 0.1
+			}
+
+			got := CubicInterpDot(hist, a, b, c, d, tt.x)
+			want := cubicInterpDotRef64(hist, a, b, c, d, tt.x)
+
+			// Use relative tolerance for floating point comparison
+			tol := 1e-10
+			if want != 0 {
+				tol = math.Abs(want) * 1e-10
+			}
+			if math.Abs(got-want) > tol {
+				t.Errorf("CubicInterpDot() = %v, want %v, diff = %v", got, want, got-want)
+			}
+		})
+	}
+}
+
+func TestCubicInterpDot_Large(t *testing.T) {
+	// Test with 64 taps (typical for high-quality audio resampling)
+	sizes := []int{32, 64, 100, 241, 1000}
+
+	for _, n := range sizes {
+		hist := make([]float64, n)
+		a := make([]float64, n)
+		b := make([]float64, n)
+		c := make([]float64, n)
+		d := make([]float64, n)
+
+		for i := range n {
+			hist[i] = float64(i+1) * 0.01
+			a[i] = float64(i) * 0.1
+			b[i] = float64(i) * 0.05
+			c[i] = float64(i) * 0.02
+			d[i] = float64(i) * 0.01
+		}
+
+		x := 0.75
+		got := CubicInterpDot(hist, a, b, c, d, x)
+		want := cubicInterpDotRef64(hist, a, b, c, d, x)
+
+		// Use relative tolerance
+		tol := math.Abs(want) * 1e-9
+		if math.Abs(got-want) > tol {
+			t.Errorf("CubicInterpDot(n=%d) = %v, want %v, diff = %v", n, got, want, got-want)
+		}
+	}
+}
+
+func TestCubicInterpDot_DifferentLengths(t *testing.T) {
+	// Test with slices of different lengths - should use minimum
+	hist := []float64{1, 2, 3, 4, 5}
+	a := []float64{1, 1, 1, 1, 1, 1, 1}
+	b := []float64{0.5, 0.5, 0.5}
+	c := []float64{0.1, 0.1, 0.1, 0.1}
+	d := []float64{0.01, 0.01, 0.01, 0.01, 0.01, 0.01}
+
+	// Minimum length is 3 (from b)
+	n := 3
+	x := 0.5
+	got := CubicInterpDot(hist, a, b, c, d, x)
+	want := cubicInterpDotRef64(hist[:n], a[:n], b[:n], c[:n], d[:n], x)
+
+	if math.Abs(got-want) > 1e-10 {
+		t.Errorf("CubicInterpDot(different lengths) = %v, want %v", got, want)
+	}
+}
+
+func TestCubicInterpDotUnsafe(t *testing.T) {
+	n := 16
+	hist := make([]float64, n)
+	a := make([]float64, n)
+	b := make([]float64, n)
+	c := make([]float64, n)
+	d := make([]float64, n)
+
+	for i := range n {
+		hist[i] = float64(i+1) * 0.1
+		a[i] = float64(i) * 0.5
+		b[i] = float64(i) * 0.3
+		c[i] = float64(i) * 0.2
+		d[i] = float64(i) * 0.1
+	}
+
+	x := 0.5
+	got := CubicInterpDotUnsafe(hist, a, b, c, d, x)
+	want := cubicInterpDotRef64(hist, a, b, c, d, x)
+
+	if math.Abs(got-want) > 1e-10 {
+		t.Errorf("CubicInterpDotUnsafe() = %v, want %v", got, want)
+	}
+}
+
+func BenchmarkCubicInterpDot_64(b *testing.B) {
+	benchmarkCubicInterpDot64(b, 64)
+}
+
+func BenchmarkCubicInterpDot_241(b *testing.B) {
+	benchmarkCubicInterpDot64(b, 241)
+}
+
+func BenchmarkCubicInterpDot_1000(b *testing.B) {
+	benchmarkCubicInterpDot64(b, 1000)
+}
+
+func benchmarkCubicInterpDot64(b *testing.B, n int) {
+	b.Helper()
+	hist := make([]float64, n)
+	a := make([]float64, n)
+	bb := make([]float64, n)
+	c := make([]float64, n)
+	d := make([]float64, n)
+
+	for i := range n {
+		hist[i] = float64(i+1) * 0.01
+		a[i] = float64(i) * 0.1
+		bb[i] = float64(i) * 0.05
+		c[i] = float64(i) * 0.02
+		d[i] = float64(i) * 0.01
+	}
+
+	x := 0.75
+	b.ResetTimer()
+	b.SetBytes(int64(n * 8 * 5)) // 5 slices of float64
+
+	var result float64
+	for i := 0; i < b.N; i++ {
+		result = CubicInterpDot(hist, a, bb, c, d, x)
+	}
+	_ = result
+}

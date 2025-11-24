@@ -856,3 +856,136 @@ euclid32_sqrt:
     FSQRTS F0, F0
     FMOVS F0, ret+48(FP)
     RET
+
+// ============================================================================
+// CUBIC INTERPOLATION DOT PRODUCT
+// ============================================================================
+
+// func cubicInterpDotNEON(hist, a, b, c, d []float32, x float32) float32
+// Computes: Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
+// Uses Horner's method for polynomial evaluation with FMLA.
+// Optimized with 2 independent accumulators for ILP.
+//
+// Frame layout (5 slices + 1 float32 + 1 return):
+//   hist: base+0, len+8
+//   a:    base+24, len+32
+//   b:    base+48, len+56
+//   c:    base+72, len+80
+//   d:    base+96, len+104
+//   x:    +120 (float32)
+//   ret:  +124 (float32)
+TEXT ·cubicInterpDotNEON(SB), NOSPLIT, $0-128
+    MOVD hist_base+0(FP), R0   // R0 = hist pointer
+    MOVD hist_len+8(FP), R6    // R6 = length
+    MOVD a_base+24(FP), R1     // R1 = a pointer
+    MOVD b_base+48(FP), R2     // R2 = b pointer
+    MOVD c_base+72(FP), R3     // R3 = c pointer
+    MOVD d_base+96(FP), R4     // R4 = d pointer
+    FMOVS x+120(FP), F31       // F31 = x (scalar)
+
+    // Broadcast x to all 4 lanes of V31
+    // DUP Vd.4S, Vn.S[0]: 0x4E040400 | (Vn << 5) | Vd
+    WORD $0x4E0407FF           // DUP V31.4S, V31.S[0]
+
+    // Initialize dual accumulators to zero for ILP
+    VEOR V0.B16, V0.B16, V0.B16  // acc0 = 0
+    VEOR V1.B16, V1.B16, V1.B16  // acc1 = 0
+
+    // Process 8 elements per iteration (2 NEON vectors)
+    LSR $3, R6, R5             // R5 = len / 8
+    CBZ R5, cubic32_neon_loop4_check
+
+cubic32_neon_loop8:
+    // Load first vector (4 elements)
+    VLD1.P 16(R4), [V2.S4]     // V2 = d[i:i+4]
+    VLD1.P 16(R3), [V3.S4]     // V3 = c[i:i+4]
+    VLD1.P 16(R2), [V4.S4]     // V4 = b[i:i+4]
+    VLD1.P 16(R1), [V5.S4]     // V5 = a[i:i+4]
+    VLD1.P 16(R0), [V6.S4]     // V6 = hist[i:i+4]
+
+    // Load second vector (4 elements)
+    VLD1.P 16(R4), [V10.S4]    // V10 = d[i+4:i+8]
+    VLD1.P 16(R3), [V11.S4]    // V11 = c[i+4:i+8]
+    VLD1.P 16(R2), [V12.S4]    // V12 = b[i+4:i+8]
+    VLD1.P 16(R1), [V13.S4]    // V13 = a[i+4:i+8]
+    VLD1.P 16(R0), [V14.S4]    // V14 = hist[i+4:i+8]
+
+    // Horner's method for first vector: coef = a + x*(b + x*(c + x*d))
+    // FMLA Vd.4S, Vn.4S, Vm.4S: 0x4E20CC00 | (Vm << 16) | (Vn << 5) | Vd
+    // Step 1: V3 = c + d*x
+    WORD $0x4E3FCC43           // FMLA V3.4S, V2.4S, V31.4S
+    // Step 2: V4 = b + (c + d*x)*x
+    WORD $0x4E3FCC64           // FMLA V4.4S, V3.4S, V31.4S
+    // Step 3: V5 = a + (b + (c + d*x)*x)*x = coef
+    WORD $0x4E3FCC85           // FMLA V5.4S, V4.4S, V31.4S
+    // Accumulate: acc0 += hist * coef
+    WORD $0x4E25CCC0           // FMLA V0.4S, V6.4S, V5.4S
+
+    // Horner's method for second vector
+    WORD $0x4E3FCD4B           // FMLA V11.4S, V10.4S, V31.4S
+    WORD $0x4E3FCD6C           // FMLA V12.4S, V11.4S, V31.4S
+    WORD $0x4E3FCD8D           // FMLA V13.4S, V12.4S, V31.4S
+    // Accumulate: acc1 += hist * coef
+    WORD $0x4E2DCDC1           // FMLA V1.4S, V14.4S, V13.4S
+
+    SUB $1, R5
+    CBNZ R5, cubic32_neon_loop8
+
+    // Combine accumulators: V0 = V0 + V1
+    WORD $0x4E21D400           // FADD V0.4S, V0.4S, V1.4S
+
+cubic32_neon_loop4_check:
+    // Check for 4-7 remaining elements
+    AND $7, R6, R5
+    LSR $2, R5, R7             // R7 = remainder / 4
+    CBZ R7, cubic32_neon_remainder
+
+    // Process 4 elements
+    VLD1.P 16(R4), [V2.S4]     // V2 = d
+    VLD1.P 16(R3), [V3.S4]     // V3 = c
+    VLD1.P 16(R2), [V4.S4]     // V4 = b
+    VLD1.P 16(R1), [V5.S4]     // V5 = a
+    VLD1.P 16(R0), [V6.S4]     // V6 = hist
+
+    // Horner's method
+    WORD $0x4E3FCC43           // FMLA V3.4S, V2.4S, V31.4S
+    WORD $0x4E3FCC64           // FMLA V4.4S, V3.4S, V31.4S
+    WORD $0x4E3FCC85           // FMLA V5.4S, V4.4S, V31.4S
+    WORD $0x4E25CCC0           // FMLA V0.4S, V6.4S, V5.4S
+
+cubic32_neon_remainder:
+    // Reduce vector FIRST before scalar ops
+    WORD $0x6E20D400           // FADDP V0.4S, V0.4S, V0.4S
+    WORD $0x7E30D800           // FADDP S0, V0.2S
+
+    // Check for remaining 1-3 elements
+    AND $3, R5, R7
+    CBZ R7, cubic32_neon_done
+
+cubic32_neon_scalar:
+    // Scalar path for remaining elements
+    FMOVS (R4), F2             // d
+    FMOVS (R3), F3             // c
+    FMOVS (R2), F4             // b
+    FMOVS (R1), F5             // a
+    FMOVS (R0), F6             // hist
+    FMOVS x+120(FP), F7        // x
+
+    // Horner's method scalar: coef = a + x*(b + x*(c + x*d))
+    // Go FMADDS syntax: Fm, Fa, Fn, Fd -> Fd = Fn * Fm + Fa
+    FMADDS F7, F3, F2, F3      // F3 = F2*F7 + F3 = d*x + c
+    FMADDS F7, F4, F3, F4      // F4 = F3*F7 + F4 = (d*x+c)*x + b
+    FMADDS F7, F5, F4, F5      // F5 = F4*F7 + F5 = coef
+    FMADDS F5, F0, F6, F0      // F0 = F6*F5 + F0 = hist*coef + acc
+
+    ADD $4, R0
+    ADD $4, R1
+    ADD $4, R2
+    ADD $4, R3
+    ADD $4, R4
+    SUB $1, R7
+    CBNZ R7, cubic32_neon_scalar
+
+cubic32_neon_done:
+    FMOVS F0, ret+124(FP)
+    RET

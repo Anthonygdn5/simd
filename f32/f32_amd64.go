@@ -471,3 +471,16 @@ func variance32(a []float32, mean float32) float32 {
 func euclideanDistance32(a, b []float32) float32 {
 	return euclideanDistance32Go(a, b)
 }
+
+func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
+	// Use AVX+FMA if available and have enough elements
+	if cpu.X86.AVX && cpu.X86.FMA && len(hist) >= minAVXElements {
+		return cubicInterpDotAVX(hist, a, b, c, d, x)
+	}
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}
+
+// CubicInterpDot assembly function declaration
+//
+//go:noescape
+func cubicInterpDotAVX(hist, a, b, c, d []float32, x float32) float32

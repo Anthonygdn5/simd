@@ -377,6 +377,50 @@ func Deinterleave2(a, b, src []float64) {
 
 const interleave2Channels = 2
 
+// CubicInterpDot computes the fused cubic interpolation dot product:
+//
+//	Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
+//
+// This is the hot inner loop for polyphase resampling with cubic coefficient
+// interpolation. The polynomial a + x*(b + x*(c + x*d)) is evaluated using
+// Horner's method for numerical stability, then multiplied by hist and summed.
+//
+// Parameters:
+//   - hist: history buffer (signal samples)
+//   - a, b, c, d: cubic polynomial coefficient arrays
+//   - x: fractional phase, typically in [0, 1)
+//
+// All slices must have equal length. Returns 0 for empty slices.
+//
+// This fused operation is more efficient than 4 separate DotProduct calls
+// because it reads the hist array only once (37% less memory bandwidth).
+//
+// Uses AVX+FMA on AMD64, NEON on ARM64, with pure Go fallback.
+func CubicInterpDot(hist, a, b, c, d []float64, x float64) float64 {
+	n := minLen5(len(hist), len(a), len(b), len(c), len(d))
+	if n == 0 {
+		return 0
+	}
+	return cubicInterpDot64(hist[:n], a[:n], b[:n], c[:n], d[:n], x)
+}
+
+// CubicInterpDotUnsafe computes the fused cubic interpolation dot product
+// without length validation.
+//
+// PRECONDITIONS (caller must ensure):
+//   - len(hist) == len(a) == len(b) == len(c) == len(d)
+//   - len(hist) > 0
+//
+// Violating these preconditions results in undefined behavior.
+// Use CubicInterpDot for safe operation with automatic length handling.
+func CubicInterpDotUnsafe(hist, a, b, c, d []float64, x float64) float64 {
+	return cubicInterpDot64(hist, a, b, c, d, x)
+}
+
+func minLen5(a, b, c, d, e int) int {
+	return min(a, b, c, d, e)
+}
+
 // ConvolveValidMulti applies multiple kernels to the same signal.
 // dsts[k][i] = sum(signal[i+j] * kernels[k][j]) for each kernel k.
 // All kernels must have the same length.

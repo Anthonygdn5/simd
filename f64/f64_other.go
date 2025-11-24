@@ -36,3 +36,6 @@ func convolveValidMulti64(dsts [][]float64, signal []float64, kernels [][]float6
 func minIdx64(a []float64) int                              { return minIdxGo64(a) }
 func maxIdx64(a []float64) int                              { return maxIdxGo64(a) }
 func addScaled64(dst []float64, alpha float64, s []float64) { addScaledGo64(dst, alpha, s) }
+func cubicInterpDot64(hist, a, b, c, d []float64, x float64) float64 {
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}
