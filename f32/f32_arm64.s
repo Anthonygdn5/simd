@@ -1086,15 +1086,31 @@ relu32_neon_done:
 
 // func tanhNEON(dst, src []float32)
 // Computes fast tanh approximation: tanh(x) ≈ x / (1 + |x|)
+// Constants for tanh32
+DATA tanh32_const_one<>+0(SB)/4, $0x3f800000  // 1.0
+DATA tanh32_const_threshold<>+0(SB)/4, $0x40200000  // 2.5
+DATA tanh32_const_neg_one<>+0(SB)/4, $0xbf800000  // -1.0
+DATA tanh32_const_zero<>+0(SB)/4, $0x00000000  // 0.0
+
+GLOBL tanh32_const_one<>(SB), RODATA|NOPTR, $4
+GLOBL tanh32_const_threshold<>(SB), RODATA|NOPTR, $4
+GLOBL tanh32_const_neg_one<>(SB), RODATA|NOPTR, $4
+GLOBL tanh32_const_zero<>(SB), RODATA|NOPTR, $4
+
 TEXT ·tanhNEON(SB), NOSPLIT, $0-48
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R3
     MOVD src_base+24(FP), R1
 
-    // Load constants for scalar processing
-    FMOVS $1.0, F31
-    FMOVS $2.5, F30
-    FMOVS $-1.0, F29
+    // Load constants from data section
+    MOVD $tanh32_const_one<>(SB), R4
+    FMOVS (R4), F31                   // F31 = 1.0
+    MOVD $tanh32_const_threshold<>(SB), R4
+    FMOVS (R4), F30                   // F30 = 2.5
+    MOVD $tanh32_const_neg_one<>(SB), R4
+    FMOVS (R4), F29                   // F29 = -1.0
+    MOVD $tanh32_const_zero<>(SB), R4
+    FMOVS (R4), F28                   // F28 = 0.0
 
     // Use scalar processing for all elements to avoid complex bit manipulation
     // The scalar loop handles saturation correctly and is still reasonably fast
@@ -1109,8 +1125,7 @@ tanh32_neon_scalar_loop:
     BLE tanh32_neon_scalar_approx
 
     // Saturate: return ±1.0 based on sign of x
-    FMOVS $0, F7                      // F7 = 0.0
-    FCMPS F0, F7                      // compare x with 0
+    FCMPS F0, F28                     // compare x with 0.0
     BGE tanh32_neon_scalar_positive
 
     // x < 0: return -1.0
