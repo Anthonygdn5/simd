@@ -2779,3 +2779,78 @@ cubic32_avx_done:
     VMOVSS X0, ret+128(FP)
     VZEROUPPER
     RET
+
+// Constants for sigmoid
+DATA sigmoid_half<>+0x00(SB)/4, $0x3f000000  // 0.5
+DATA sigmoid_half<>+0x04(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x08(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x0c(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x10(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x14(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x18(SB)/4, $0x3f000000
+DATA sigmoid_half<>+0x1c(SB)/4, $0x3f000000
+GLOBL sigmoid_half<>(SB), RODATA|NOPTR, $32
+
+DATA sigmoid_one<>+0x00(SB)/4, $0x3f800000  // 1.0
+DATA sigmoid_one<>+0x04(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x08(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x0c(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x10(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x14(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x18(SB)/4, $0x3f800000
+DATA sigmoid_one<>+0x1c(SB)/4, $0x3f800000
+GLOBL sigmoid_one<>(SB), RODATA|NOPTR, $32
+
+// func sigmoidAVX(dst, src []float32)
+// Implements fast sigmoid approximation: σ(x) ≈ 0.5 + 0.5 * x / (1 + |x|)
+// This approximation is SIMD-friendly and commonly used in neural networks.
+TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), DI
+    MOVQ dst_len+8(FP), CX
+    MOVQ src_base+24(FP), SI
+
+    // Load constants
+    VMOVAPS sigmoid_half<>(SB), Y8   // Y8 = 0.5
+    VMOVAPS sigmoid_one<>(SB), Y9    // Y9 = 1.0
+    VMOVAPS absf32mask<>(SB), Y10    // Y10 = abs mask
+
+    // Process 8 elements per iteration
+    MOVQ CX, AX
+    SHRQ $3, AX
+    JZ   sigmoid32_remainder
+
+sigmoid32_loop8:
+    VMOVUPS (SI), Y0               // Y0 = x
+    VANDPS Y10, Y0, Y1             // Y1 = |x|
+    VADDPS Y9, Y1, Y2              // Y2 = 1 + |x|
+    VDIVPS Y2, Y0, Y3              // Y3 = x / (1 + |x|)
+    VMULPS Y8, Y3, Y4              // Y4 = 0.5 * x / (1 + |x|)
+    VADDPS Y8, Y4, Y5              // Y5 = 0.5 + 0.5 * x / (1 + |x|)
+    VMOVUPS Y5, (DI)               // store result
+
+    ADDQ $32, SI
+    ADDQ $32, DI
+    DECQ AX
+    JNZ  sigmoid32_loop8
+
+sigmoid32_remainder:
+    ANDQ $7, CX
+    JZ   sigmoid32_done
+
+sigmoid32_scalar:
+    VMOVSS (SI), X0                // X0 = x
+    VANDPS X10, X0, X1             // X1 = |x|
+    VADDSS X9, X1, X2              // X2 = 1 + |x|
+    VDIVSS X2, X0, X3              // X3 = x / (1 + |x|)
+    VMULSS X8, X3, X4              // X4 = 0.5 * x / (1 + |x|)
+    VADDSS X8, X4, X5              // X5 = 0.5 + 0.5 * x / (1 + |x|)
+    VMOVSS X5, (DI)                // store result
+
+    ADDQ $4, SI
+    ADDQ $4, DI
+    DECQ CX
+    JNZ  sigmoid32_scalar
+
+sigmoid32_done:
+    VZEROUPPER
+    RET

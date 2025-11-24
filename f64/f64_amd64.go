@@ -327,6 +327,39 @@ func cubicInterpDot64(hist, a, b, c, d []float64, x float64) float64 {
 	return cubicInterpDotGo(hist, a, b, c, d, x)
 }
 
+func sigmoid64(dst, src []float64) {
+	// Use AVX+FMA if available and have enough elements
+	if cpu.X86.AVX && cpu.X86.FMA && len(dst) >= minAVXElements {
+		sigmoidAVX(dst, src)
+		return
+	}
+	sigmoid64Go(dst, src)
+}
+
+func relu64(dst, src []float64) {
+	// Use Go implementation for now, can optimize with AVX later
+	relu64Go(dst, src)
+}
+
+func clampScale64(dst, src []float64, minVal, maxVal, scale float64) {
+	// Use Go implementation for now, can optimize with AVX later
+	clampScale64Go(dst, src, minVal, maxVal, scale)
+}
+
+func tanh64(dst, src []float64) {
+	// Use Go implementation for now, can optimize with AVX later
+	tanh64Go(dst, src)
+}
+
+func exp64(dst, src []float64) {
+	// Exp is complex, use Go implementation with math.Exp for now
+	// Can be optimized with AVX polynomial approximation later
+	exp64Go(dst, src)
+}
+
+//go:noescape
+func sigmoidAVX(dst, src []float64)
+
 // AVX+FMA assembly function declarations (4x float64 per iteration)
 //
 //go:noescape

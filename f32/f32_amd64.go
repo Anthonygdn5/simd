@@ -484,3 +484,39 @@ func cubicInterpDot32(hist, a, b, c, d []float32, x float32) float32 {
 //
 //go:noescape
 func cubicInterpDotAVX(hist, a, b, c, d []float32, x float32) float32
+
+func sigmoid32(dst, src []float32) {
+	// Use AVX+FMA if available and have enough elements
+	if cpu.X86.AVX && cpu.X86.FMA && len(dst) >= minAVXElements {
+		sigmoidAVX(dst, src)
+		return
+	}
+	sigmoid32Go(dst, src)
+}
+
+// Sigmoid assembly function declaration
+//
+//go:noescape
+func sigmoidAVX(dst, src []float32)
+
+func relu32(dst, src []float32) {
+	// ReLU is simple enough that SIMD helps even with Go fallback initially
+	// Can be optimized with AVX later
+	relu32Go(dst, src)
+}
+
+func clampScale32(dst, src []float32, minVal, maxVal, scale float32) {
+	// Use Go implementation for now, can optimize with AVX later
+	clampScale32Go(dst, src, minVal, maxVal, scale)
+}
+
+func tanh32(dst, src []float32) {
+	// Use Go implementation for now, can optimize with AVX later
+	tanh32Go(dst, src)
+}
+
+func exp32(dst, src []float32) {
+	// Exp is complex, use Go implementation with math.Exp for now
+	// Can be optimized with AVX polynomial approximation later
+	exp32Go(dst, src)
+}

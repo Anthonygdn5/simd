@@ -8,6 +8,13 @@ const (
 	unrollMask   = unrollFactor - 1
 )
 
+// Numerical stability thresholds
+const (
+	sigmoidClampThreshold = 20.0  // sigmoid(x > 20) ≈ 1, sigmoid(x < -20) ≈ 0
+	tanhClampThreshold    = 2.5   // tanh(x > 2.5) ≈ 1, tanh(x < -2.5) ≈ -1
+	expOverflowThreshold  = 709.0 // exp(709) ≈ max float64, prevents overflow
+)
+
 // Pure Go implementations - used as fallback on all architectures
 
 func dotProductGo(a, b []float64) float64 {
@@ -306,5 +313,82 @@ func maxIdxGo64(a []float64) int {
 func addScaledGo64(dst []float64, alpha float64, s []float64) {
 	for i := range dst {
 		dst[i] += alpha * s[i]
+	}
+}
+
+// sigmoid64Go computes sigmoid(x) = 1 / (1 + e^(-x)) using math.Exp.
+// This is accurate but slower than SIMD approximations.
+func sigmoid64Go(dst, src []float64) {
+	for i := range dst {
+		x := src[i]
+		// Clamp extreme values for numerical stability
+		switch {
+		case x > sigmoidClampThreshold:
+			dst[i] = 1.0
+		case x < -sigmoidClampThreshold:
+			dst[i] = 0.0
+		default:
+			dst[i] = 1.0 / (1.0 + math.Exp(-x))
+		}
+	}
+}
+
+// relu64Go computes ReLU activation: dst[i] = max(0, src[i]).
+func relu64Go(dst, src []float64) {
+	for i := range dst {
+		if src[i] > 0 {
+			dst[i] = src[i]
+		} else {
+			dst[i] = 0
+		}
+	}
+}
+
+// clampScale64Go performs fused clamp and scale operation.
+// dst[i] = (clamp(src[i], minVal, maxVal) - minVal) * scale
+func clampScale64Go(dst, src []float64, minVal, maxVal, scale float64) {
+	for i := range dst {
+		v := src[i]
+		if v < minVal {
+			v = minVal
+		} else if v > maxVal {
+			v = maxVal
+		}
+		dst[i] = (v - minVal) * scale
+	}
+}
+
+// tanh64Go computes hyperbolic tangent using fast approximation.
+// For |x| > 2.5: tanh(x) ≈ sign(x)
+// Otherwise: tanh(x) ≈ x / (1 + |x|)
+func tanh64Go(dst, src []float64) {
+	for i := range dst {
+		x := src[i]
+		switch {
+		case x > tanhClampThreshold:
+			dst[i] = 1.0
+		case x < -tanhClampThreshold:
+			dst[i] = -1.0
+		default:
+			absX := math.Abs(x)
+			dst[i] = x / (1.0 + absX)
+		}
+	}
+}
+
+// exp64Go computes exponential function: dst[i] = e^src[i].
+// Uses math.Exp with overflow/underflow protection.
+func exp64Go(dst, src []float64) {
+	for i := range dst {
+		x := src[i]
+		// Clamp to prevent overflow/underflow
+		switch {
+		case x > expOverflowThreshold:
+			dst[i] = math.Exp(expOverflowThreshold)
+		case x < -expOverflowThreshold:
+			dst[i] = 0.0
+		default:
+			dst[i] = math.Exp(x)
+		}
 	}
 }

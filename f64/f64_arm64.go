@@ -292,3 +292,44 @@ func cubicInterpDot64(hist, a, b, c, d []float64, x float64) float64 {
 
 //go:noescape
 func cubicInterpDotNEON(hist, a, b, c, d []float64, x float64) float64
+
+func sigmoid64(dst, src []float64) {
+	if hasNEON && len(dst) >= 2 {
+		sigmoidNEON(dst, src)
+		return
+	}
+	sigmoid64Go(dst, src)
+}
+
+func relu64(dst, src []float64) {
+	if hasNEON && len(dst) >= 2 {
+		reluNEON64(dst, src)
+		return
+	}
+	relu64Go(dst, src)
+}
+
+func clampScale64(dst, src []float64, minVal, maxVal, scale float64) {
+	clampScale64Go(dst, src, minVal, maxVal, scale)
+}
+
+func tanh64(dst, src []float64) {
+	if hasNEON && len(dst) >= 2 {
+		tanhNEON64(dst, src)
+		return
+	}
+	tanh64Go(dst, src)
+}
+
+func exp64(dst, src []float64) {
+	exp64Go(dst, src)
+}
+
+//go:noescape
+func sigmoidNEON(dst, src []float64)
+
+//go:noescape
+func reluNEON64(dst, src []float64)
+
+//go:noescape
+func tanhNEON64(dst, src []float64)

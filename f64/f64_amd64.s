@@ -3173,3 +3173,72 @@ cubic_avx_done:
     VMOVSD X0, ret+128(FP)
     VZEROUPPER
     RET
+
+// Constants for sigmoid (float64)
+DATA sigmoid_half64<>+0x00(SB)/8, $0x3FE0000000000000  // 0.5
+DATA sigmoid_half64<>+0x08(SB)/8, $0x3FE0000000000000
+DATA sigmoid_half64<>+0x10(SB)/8, $0x3FE0000000000000
+DATA sigmoid_half64<>+0x18(SB)/8, $0x3FE0000000000000
+GLOBL sigmoid_half64<>(SB), RODATA|NOPTR, $32
+
+DATA sigmoid_one64<>+0x00(SB)/8, $0x3FF0000000000000  // 1.0
+DATA sigmoid_one64<>+0x08(SB)/8, $0x3FF0000000000000
+DATA sigmoid_one64<>+0x10(SB)/8, $0x3FF0000000000000
+DATA sigmoid_one64<>+0x18(SB)/8, $0x3FF0000000000000
+GLOBL sigmoid_one64<>(SB), RODATA|NOPTR, $32
+
+// Note: absf64mask is already defined at top of file
+
+// func sigmoidAVX(dst, src []float64)
+// Implements fast sigmoid approximation: σ(x) ≈ 0.5 + 0.5 * x / (1 + |x|)
+// This approximation is SIMD-friendly and commonly used in neural networks.
+TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), DI
+    MOVQ dst_len+8(FP), CX
+    MOVQ src_base+24(FP), SI
+
+    // Load constants
+    VMOVAPD sigmoid_half64<>(SB), Y8   // Y8 = 0.5
+    VMOVAPD sigmoid_one64<>(SB), Y9    // Y9 = 1.0
+    VMOVAPD absf64mask<>(SB), Y10      // Y10 = abs mask
+
+    // Process 4 elements per iteration
+    MOVQ CX, AX
+    SHRQ $2, AX
+    JZ   sigmoid64_remainder
+
+sigmoid64_loop4:
+    VMOVUPD (SI), Y0               // Y0 = x
+    VANDPD Y10, Y0, Y1             // Y1 = |x|
+    VADDPD Y9, Y1, Y2              // Y2 = 1 + |x|
+    VDIVPD Y2, Y0, Y3              // Y3 = x / (1 + |x|)
+    VMULPD Y8, Y3, Y4              // Y4 = 0.5 * x / (1 + |x|)
+    VADDPD Y8, Y4, Y5              // Y5 = 0.5 + 0.5 * x / (1 + |x|)
+    VMOVUPD Y5, (DI)               // store result
+
+    ADDQ $32, SI
+    ADDQ $32, DI
+    DECQ AX
+    JNZ  sigmoid64_loop4
+
+sigmoid64_remainder:
+    ANDQ $3, CX
+    JZ   sigmoid64_done
+
+sigmoid64_scalar:
+    VMOVSD (SI), X0                // X0 = x
+    VANDPD X10, X0, X1             // X1 = |x|
+    VADDSD X9, X1, X2              // X2 = 1 + |x|
+    VDIVSD X2, X0, X3              // X3 = x / (1 + |x|)
+    VMULSD X8, X3, X4              // X4 = 0.5 * x / (1 + |x|)
+    VADDSD X8, X4, X5              // X5 = 0.5 + 0.5 * x / (1 + |x|)
+    VMOVSD X5, (DI)                // store result
+
+    ADDQ $8, SI
+    ADDQ $8, DI
+    DECQ CX
+    JNZ  sigmoid64_scalar
+
+sigmoid64_done:
+    VZEROUPPER
+    RET
