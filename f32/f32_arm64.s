@@ -723,7 +723,8 @@ recip32_done:
 
 // func addScaledNEON(dst []float32, alpha float32, s []float32)
 // dst[i] += alpha * s[i] - AXPY operation
-TEXT ·addScaledNEON(SB), NOSPLIT, $0-52
+// Frame: dst(24) + alpha(4) + pad(4) + s(24) = 56 bytes
+TEXT ·addScaledNEON(SB), NOSPLIT, $0-56
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R2
     FMOVS alpha+24(FP), F3
@@ -873,8 +874,10 @@ euclid32_sqrt:
 //   c:    base+72, len+80
 //   d:    base+96, len+104
 //   x:    +120 (float32)
-//   ret:  +124 (float32)
-TEXT ·cubicInterpDotNEON(SB), NOSPLIT, $0-128
+//   pad:  +124 (4 bytes alignment)
+//   ret:  +128 (float32)
+// Frame: 5 slices(120) + x(4) + pad(4) + ret(4) = 132 bytes
+TEXT ·cubicInterpDotNEON(SB), NOSPLIT, $0-132
     MOVD hist_base+0(FP), R0   // R0 = hist pointer
     MOVD hist_len+8(FP), R6    // R6 = length
     MOVD a_base+24(FP), R1     // R1 = a pointer
@@ -987,5 +990,5 @@ cubic32_neon_scalar:
     CBNZ R7, cubic32_neon_scalar
 
 cubic32_neon_done:
-    FMOVS F0, ret+124(FP)
+    FMOVS F0, ret+128(FP)
     RET
