@@ -248,3 +248,35 @@ func euclideanDistance32Go(a, b []float32) float32 {
 	}
 	return float32(math.Sqrt(float64(sum)))
 }
+
+// cubicInterpDotGo computes: Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
+// Uses Horner's method for numerical stability.
+func cubicInterpDotGo(hist, a, b, c, d []float32, x float32) float32 {
+	var sum float32
+	n := len(hist)
+	n8 := n &^ unrollMask // Round down to multiple of 8
+
+	// Unrolled loop: 8 elements per iteration (match AVX width)
+	for i := 0; i < n8; i += 8 {
+		// Horner's method: coef = a + x*(b + x*(c + x*d))
+		coef0 := a[i] + x*(b[i]+x*(c[i]+x*d[i]))
+		coef1 := a[i+1] + x*(b[i+1]+x*(c[i+1]+x*d[i+1]))
+		coef2 := a[i+2] + x*(b[i+2]+x*(c[i+2]+x*d[i+2]))
+		coef3 := a[i+3] + x*(b[i+3]+x*(c[i+3]+x*d[i+3]))
+		coef4 := a[i+4] + x*(b[i+4]+x*(c[i+4]+x*d[i+4]))
+		coef5 := a[i+5] + x*(b[i+5]+x*(c[i+5]+x*d[i+5]))
+		coef6 := a[i+6] + x*(b[i+6]+x*(c[i+6]+x*d[i+6]))
+		coef7 := a[i+7] + x*(b[i+7]+x*(c[i+7]+x*d[i+7]))
+
+		sum += hist[i]*coef0 + hist[i+1]*coef1 + hist[i+2]*coef2 + hist[i+3]*coef3
+		sum += hist[i+4]*coef4 + hist[i+5]*coef5 + hist[i+6]*coef6 + hist[i+7]*coef7
+	}
+
+	// Handle remainder
+	for i := n8; i < n; i++ {
+		coef := a[i] + x*(b[i]+x*(c[i]+x*d[i]))
+		sum += hist[i] * coef
+	}
+
+	return sum
+}

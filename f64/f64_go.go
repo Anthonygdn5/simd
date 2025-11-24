@@ -236,6 +236,36 @@ func deinterleave2Go(a, b, src []float64) {
 	}
 }
 
+// cubicInterpDotGo computes: Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
+// Uses Horner's method for numerical stability.
+func cubicInterpDotGo(hist, a, b, c, d []float64, x float64) float64 {
+	var sum float64
+	n := len(hist)
+	n4 := n &^ unrollMask // Round down to multiple of 4
+
+	// Unrolled loop: 4 elements per iteration
+	for i := 0; i < n4; i += 4 {
+		// Horner's method: coef = a + x*(b + x*(c + x*d))
+		coef0 := math.FMA(x, math.FMA(x, math.FMA(x, d[i], c[i]), b[i]), a[i])
+		coef1 := math.FMA(x, math.FMA(x, math.FMA(x, d[i+1], c[i+1]), b[i+1]), a[i+1])
+		coef2 := math.FMA(x, math.FMA(x, math.FMA(x, d[i+2], c[i+2]), b[i+2]), a[i+2])
+		coef3 := math.FMA(x, math.FMA(x, math.FMA(x, d[i+3], c[i+3]), b[i+3]), a[i+3])
+
+		sum = math.FMA(hist[i], coef0, sum)
+		sum = math.FMA(hist[i+1], coef1, sum)
+		sum = math.FMA(hist[i+2], coef2, sum)
+		sum = math.FMA(hist[i+3], coef3, sum)
+	}
+
+	// Handle remainder
+	for i := n4; i < n; i++ {
+		coef := math.FMA(x, math.FMA(x, math.FMA(x, d[i], c[i]), b[i]), a[i])
+		sum = math.FMA(hist[i], coef, sum)
+	}
+
+	return sum
+}
+
 func convolveValidMultiGo(dsts [][]float64, signal []float64, kernels [][]float64, n, _ int) {
 	// Kernel-major loop order: each kernel stays hot in cache for entire signal pass
 	for k, kernel := range kernels {

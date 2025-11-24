@@ -282,3 +282,13 @@ func addScaled64(dst []float64, alpha float64, s []float64) {
 
 //go:noescape
 func addScaledNEON(dst []float64, alpha float64, s []float64)
+
+func cubicInterpDot64(hist, a, b, c, d []float64, x float64) float64 {
+	if hasNEON && len(hist) >= 2 {
+		return cubicInterpDotNEON(hist, a, b, c, d, x)
+	}
+	return cubicInterpDotGo(hist, a, b, c, d, x)
+}
+
+//go:noescape
+func cubicInterpDotNEON(hist, a, b, c, d []float64, x float64) float64

@@ -1148,3 +1148,195 @@ func TestConvolveValidMulti_FewerDstsThanKernels(_ *testing.T) {
 	dsts := [][]float32{make([]float32, 4)}
 	ConvolveValidMulti(dsts, signal, kernels)
 }
+
+// Tests for CubicInterpDot
+
+// cubicInterpDotRef32 is a reference implementation for testing
+func cubicInterpDotRef32(hist, a, b, c, d []float32, x float32) float32 {
+	var sum float32
+	for i := range hist {
+		coef := a[i] + x*(b[i]+x*(c[i]+x*d[i]))
+		sum += hist[i] * coef
+	}
+	return sum
+}
+
+func TestCubicInterpDot(t *testing.T) {
+	t.Logf("CPU: %s", cpu.Info())
+
+	tests := []struct {
+		name string
+		n    int
+		x    float32
+	}{
+		{"empty", 0, 0.5},
+		{"single", 1, 0.5},
+		{"two", 2, 0.5},
+		{"three", 3, 0.5},
+		{"four", 4, 0.5},          // NEON vector width
+		{"five", 5, 0.5},          // NEON + scalar remainder
+		{"seven", 7, 0.5},         // Below AVX threshold
+		{"eight", 8, 0.5},         // AVX vector width
+		{"nine", 9, 0.5},          // AVX + scalar remainder
+		{"fifteen", 15, 0.5},      // Below 2x AVX
+		{"sixteen", 16, 0.5},      // 2x AVX / AVX-512 vector width
+		{"seventeen", 17, 0.5},    // 2x AVX + scalar remainder
+		{"thirty_two", 32, 0.5},   // 2x AVX-512
+		{"thirty_three", 33, 0.5}, // 2x AVX-512 + remainder
+		{"x=0", 16, 0.0},          // Edge case: x=0 means only a[] matters
+		{"x=0.999", 16, 0.999},    // Near boundary
+		{"x=1", 16, 1.0},          // Edge case
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.n == 0 {
+				got := CubicInterpDot(nil, nil, nil, nil, nil, tt.x)
+				if got != 0 {
+					t.Errorf("CubicInterpDot(empty) = %v, want 0", got)
+				}
+				return
+			}
+
+			hist := make([]float32, tt.n)
+			a := make([]float32, tt.n)
+			b := make([]float32, tt.n)
+			c := make([]float32, tt.n)
+			d := make([]float32, tt.n)
+
+			for i := range tt.n {
+				hist[i] = float32(i+1) * 0.1
+				a[i] = float32(i) * 0.5
+				b[i] = float32(i) * 0.3
+				c[i] = float32(i) * 0.2
+				d[i] = float32(i) * 0.1
+			}
+
+			got := CubicInterpDot(hist, a, b, c, d, tt.x)
+			want := cubicInterpDotRef32(hist, a, b, c, d, tt.x)
+
+			// Use relative tolerance for floating point comparison
+			tol := float32(1e-5)
+			if want != 0 {
+				tol = float32(math.Abs(float64(want)) * 1e-5)
+			}
+			if math.Abs(float64(got-want)) > float64(tol) {
+				t.Errorf("CubicInterpDot() = %v, want %v, diff = %v", got, want, got-want)
+			}
+		})
+	}
+}
+
+func TestCubicInterpDot_Large(t *testing.T) {
+	// Test with various sizes typical for audio resampling
+	sizes := []int{32, 64, 100, 241, 1000}
+
+	for _, n := range sizes {
+		hist := make([]float32, n)
+		a := make([]float32, n)
+		b := make([]float32, n)
+		c := make([]float32, n)
+		d := make([]float32, n)
+
+		for i := range n {
+			hist[i] = float32(i+1) * 0.01
+			a[i] = float32(i) * 0.1
+			b[i] = float32(i) * 0.05
+			c[i] = float32(i) * 0.02
+			d[i] = float32(i) * 0.01
+		}
+
+		x := float32(0.75)
+		got := CubicInterpDot(hist, a, b, c, d, x)
+		want := cubicInterpDotRef32(hist, a, b, c, d, x)
+
+		// Use relative tolerance (float32 has less precision)
+		tol := float32(math.Abs(float64(want)) * 1e-4)
+		if math.Abs(float64(got-want)) > float64(tol) {
+			t.Errorf("CubicInterpDot(n=%d) = %v, want %v, diff = %v", n, got, want, got-want)
+		}
+	}
+}
+
+func TestCubicInterpDot_DifferentLengths(t *testing.T) {
+	// Test with slices of different lengths - should use minimum
+	hist := []float32{1, 2, 3, 4, 5}
+	a := []float32{1, 1, 1, 1, 1, 1, 1}
+	b := []float32{0.5, 0.5, 0.5}
+	c := []float32{0.1, 0.1, 0.1, 0.1}
+	d := []float32{0.01, 0.01, 0.01, 0.01, 0.01, 0.01}
+
+	// Minimum length is 3 (from b)
+	n := 3
+	x := float32(0.5)
+	got := CubicInterpDot(hist, a, b, c, d, x)
+	want := cubicInterpDotRef32(hist[:n], a[:n], b[:n], c[:n], d[:n], x)
+
+	if math.Abs(float64(got-want)) > 1e-6 {
+		t.Errorf("CubicInterpDot(different lengths) = %v, want %v", got, want)
+	}
+}
+
+func TestCubicInterpDotUnsafe(t *testing.T) {
+	n := 16
+	hist := make([]float32, n)
+	a := make([]float32, n)
+	b := make([]float32, n)
+	c := make([]float32, n)
+	d := make([]float32, n)
+
+	for i := range n {
+		hist[i] = float32(i+1) * 0.1
+		a[i] = float32(i) * 0.5
+		b[i] = float32(i) * 0.3
+		c[i] = float32(i) * 0.2
+		d[i] = float32(i) * 0.1
+	}
+
+	x := float32(0.5)
+	got := CubicInterpDotUnsafe(hist, a, b, c, d, x)
+	want := cubicInterpDotRef32(hist, a, b, c, d, x)
+
+	if math.Abs(float64(got-want)) > 1e-5 {
+		t.Errorf("CubicInterpDotUnsafe() = %v, want %v", got, want)
+	}
+}
+
+func BenchmarkCubicInterpDot_64(b *testing.B) {
+	benchmarkCubicInterpDot32(b, 64)
+}
+
+func BenchmarkCubicInterpDot_241(b *testing.B) {
+	benchmarkCubicInterpDot32(b, 241)
+}
+
+func BenchmarkCubicInterpDot_1000(b *testing.B) {
+	benchmarkCubicInterpDot32(b, 1000)
+}
+
+func benchmarkCubicInterpDot32(b *testing.B, n int) {
+	b.Helper()
+	hist := make([]float32, n)
+	a := make([]float32, n)
+	coefB := make([]float32, n)
+	c := make([]float32, n)
+	d := make([]float32, n)
+
+	for i := range n {
+		hist[i] = float32(i+1) * 0.01
+		a[i] = float32(i) * 0.1
+		coefB[i] = float32(i) * 0.05
+		c[i] = float32(i) * 0.02
+		d[i] = float32(i) * 0.01
+	}
+
+	x := float32(0.75)
+	b.ResetTimer()
+	b.SetBytes(int64(n * 4 * 5)) // 5 slices of float32
+
+	var result float32
+	for i := 0; i < b.N; i++ {
+		result = CubicInterpDot(hist, a, coefB, c, d, x)
+	}
+	_ = result
+}

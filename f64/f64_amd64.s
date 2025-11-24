@@ -3069,3 +3069,107 @@ addscaled_sse2_remainder:
 
 addscaled_sse2_done:
     RET
+
+// ============================================================================
+// CUBIC INTERPOLATION DOT PRODUCT
+// ============================================================================
+
+// func cubicInterpDotAVX(hist, a, b, c, d []float64, x float64) float64
+// Computes: Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
+// Uses Horner's method for polynomial evaluation with FMA.
+//
+// Frame layout (5 slices + 1 float64 + 1 return):
+//   hist: base+0, len+8, cap+16
+//   a:    base+24, len+32, cap+40
+//   b:    base+48, len+56, cap+64
+//   c:    base+72, len+80, cap+88
+//   d:    base+96, len+104, cap+112
+//   x:    +120
+//   ret:  +128
+TEXT ·cubicInterpDotAVX(SB), NOSPLIT, $0-136
+    MOVQ hist_base+0(FP), SI   // SI = hist pointer
+    MOVQ hist_len+8(FP), CX    // CX = length
+    MOVQ a_base+24(FP), DI     // DI = a pointer
+    MOVQ b_base+48(FP), R8     // R8 = b pointer
+    MOVQ c_base+72(FP), R9     // R9 = c pointer
+    MOVQ d_base+96(FP), R10    // R10 = d pointer
+
+    // Broadcast x to all lanes of Y7
+    VBROADCASTSD x+120(FP), Y7
+
+    // Initialize accumulator to zero
+    VXORPD Y0, Y0, Y0          // Y0 = accumulator
+
+    // Process 4 elements per iteration (one YMM register)
+    MOVQ CX, AX
+    SHRQ $2, AX                // AX = len / 4
+    JZ   cubic_avx_remainder
+
+cubic_avx_loop4:
+    // Load coefficient vectors
+    VMOVUPD (R10), Y1          // Y1 = d[i:i+4]
+    VMOVUPD (R9), Y2           // Y2 = c[i:i+4]
+    VMOVUPD (R8), Y3           // Y3 = b[i:i+4]
+    VMOVUPD (DI), Y4           // Y4 = a[i:i+4]
+    VMOVUPD (SI), Y5           // Y5 = hist[i:i+4]
+
+    // Horner's method: coef = a + x*(b + x*(c + x*d))
+    // Step 1: Y2 = c + x*d (using VFMADD231: dst = src1*src2 + dst)
+    VFMADD231PD Y1, Y7, Y2     // Y2 = d*x + c
+    // Step 2: Y3 = b + x*(c + x*d)
+    VFMADD231PD Y2, Y7, Y3     // Y3 = (d*x+c)*x + b
+    // Step 3: Y4 = a + x*(b + x*(c + x*d))
+    VFMADD231PD Y3, Y7, Y4     // Y4 = ((d*x+c)*x+b)*x + a = coef
+
+    // Accumulate: acc += hist * coef
+    VFMADD231PD Y5, Y4, Y0     // Y0 = hist * coef + Y0
+
+    // Advance pointers
+    ADDQ $32, SI
+    ADDQ $32, DI
+    ADDQ $32, R8
+    ADDQ $32, R9
+    ADDQ $32, R10
+    DECQ AX
+    JNZ  cubic_avx_loop4
+
+cubic_avx_remainder:
+    // Reduce Y0 to scalar first (before scalar ops that zero upper bits)
+    VEXTRACTF128 $1, Y0, X1
+    VADDPD X1, X0, X0
+    VHADDPD X0, X0, X0         // X0[0] = sum of all 4 elements
+
+    // Handle remaining 1-3 elements
+    ANDQ $3, CX
+    JZ   cubic_avx_done
+
+cubic_avx_scalar:
+    // Load single elements
+    VMOVSD (R10), X1           // X1 = d[i]
+    VMOVSD (R9), X2            // X2 = c[i]
+    VMOVSD (R8), X3            // X3 = b[i]
+    VMOVSD (DI), X4            // X4 = a[i]
+    VMOVSD (SI), X5            // X5 = hist[i]
+    VMOVSD x+120(FP), X6       // X6 = x
+
+    // Horner's method for scalar
+    VFMADD231SD X1, X6, X2     // X2 = d*x + c
+    VFMADD231SD X2, X6, X3     // X3 = (d*x+c)*x + b
+    VFMADD231SD X3, X6, X4     // X4 = coef
+
+    // Accumulate
+    VFMADD231SD X5, X4, X0     // X0 = hist * coef + X0
+
+    // Advance pointers
+    ADDQ $8, SI
+    ADDQ $8, DI
+    ADDQ $8, R8
+    ADDQ $8, R9
+    ADDQ $8, R10
+    DECQ CX
+    JNZ  cubic_avx_scalar
+
+cubic_avx_done:
+    VMOVSD X0, ret+128(FP)
+    VZEROUPPER
+    RET
