@@ -1091,15 +1091,11 @@ TEXT ·tanhNEON(SB), NOSPLIT, $0-48
     MOVD dst_len+8(FP), R3
     MOVD src_base+24(FP), R1
 
-    // Load constants by moving bit patterns from integer registers
-    MOVW $0x3f800000, R4              // 1.0 in IEEE 754
-    FMOVS R4, F31
-    MOVW $0x40200000, R4              // 2.5 in IEEE 754
-    FMOVS R4, F30
-    MOVW $0xbf800000, R4              // -1.0 in IEEE 754
-    FMOVS R4, F29
-    MOVW $0x00000000, R4              // 0.0 in IEEE 754
-    FMOVS R4, F28
+    // Load constants - both 1.0 and 2.5 are encodable FMOV immediates
+    FMOVS $1.0, F31
+    FMOVS $2.5, F30
+    FMOVS $-1.0, F29
+    FMOVS $0, F28
 
     // Use scalar processing for all elements to avoid complex bit manipulation
     // The scalar loop handles saturation correctly and is still reasonably fast
