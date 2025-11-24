@@ -146,8 +146,8 @@ TEXT ·scaleAVX(SB), NOSPLIT, $0-64
     MOVQ a_base+24(FP), SI
 
     // Load scalar and create [sr, si, sr, si] pattern
-    VMOVSD s+48(FP), X8
-    VMOVSD s+56(FP), X9
+    VMOVSD s_real+48(FP), X8
+    VMOVSD s_imag+56(FP), X9
     VUNPCKLPD X9, X8, X1         // X1 = [sr, si]
     VINSERTF128 $1, X1, Y1, Y1   // Y1 = [sr, si, sr, si]
 
@@ -184,8 +184,8 @@ scale_avx_remainder:
     JZ   scale_avx_done
 
     VMOVUPD (SI), X0
-    VMOVSD s+48(FP), X8
-    VMOVSD s+56(FP), X9
+    VMOVSD s_real+48(FP), X8
+    VMOVSD s_imag+56(FP), X9
     VUNPCKLPD X9, X8, X1
     VSHUFPD $0x01, X1, X1, X4
 
@@ -425,8 +425,8 @@ TEXT ·scaleAVX512(SB), NOSPLIT, $0-64
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
-    VBROADCASTSD s+48(FP), Z6
-    VBROADCASTSD s+56(FP), Z7
+    VBROADCASTSD s_real+48(FP), Z6
+    VBROADCASTSD s_imag+56(FP), Z7
     VSHUFPD $0x00, Z7, Z6, Z1    // [sr, si, sr, si, ...]
     VSHUFPD $0xFF, Z6, Z7, Z4    // [si, sr, si, sr, ...]
 
@@ -463,8 +463,8 @@ scale_avx512_remainder:
 
 scale_avx512_tail:
     VMOVUPD (SI), X0
-    VMOVSD s+48(FP), X8
-    VMOVSD s+56(FP), X9
+    VMOVSD s_real+48(FP), X8
+    VMOVSD s_imag+56(FP), X9
     VUNPCKLPD X9, X8, X1
     VSHUFPD $0x01, X1, X1, X4
 
@@ -670,8 +670,8 @@ TEXT ·scaleSSE2(SB), NOSPLIT, $0-64
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
 
-    MOVSD s+48(FP), X6
-    MOVSD s+56(FP), X7
+    MOVSD s_real+48(FP), X6
+    MOVSD s_imag+56(FP), X7
     UNPCKLPD X7, X6              // X6 = [sr, si]
     MOVAPD X6, X7
     SHUFPD $0x01, X7, X7         // X7 = [si, sr]
@@ -761,7 +761,7 @@ sub_sse2_done:
 
 // func absAVX512(dst []float64, a []complex128)
 // Computes |z| = sqrt(real² + imag²) for each complex number
-TEXT ·absAVX512(SB), NOSPLIT, $0-56
+TEXT ·absAVX512(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -830,7 +830,7 @@ abs_avx512_done:
     RET
 
 // func absAVX(dst []float64, a []complex128)
-TEXT ·absAVX(SB), NOSPLIT, $0-56
+TEXT ·absAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -862,7 +862,7 @@ abs_avx_done:
     RET
 
 // func absSSE2(dst []float64, a []complex128)
-TEXT ·absSSE2(SB), NOSPLIT, $0-56
+TEXT ·absSSE2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -898,7 +898,7 @@ abs_sse2_done:
 
 // func absSqAVX512(dst []float64, a []complex128)
 // Fixed: Use VHADDPD + proper packing (same approach as absAVX512)
-TEXT ·absSqAVX512(SB), NOSPLIT, $0-56
+TEXT ·absSqAVX512(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -963,7 +963,7 @@ abssq_avx512_done:
     RET
 
 // func absSqAVX(dst []float64, a []complex128)
-TEXT ·absSqAVX(SB), NOSPLIT, $0-56
+TEXT ·absSqAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -992,7 +992,7 @@ abssq_avx_done:
     RET
 
 // func absSqSSE2(dst []float64, a []complex128)
-TEXT ·absSqSSE2(SB), NOSPLIT, $0-56
+TEXT ·absSqSSE2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -1024,7 +1024,7 @@ abssq_sse2_done:
 // ============================================================================
 
 // func conjAVX512(dst, a []complex128)
-TEXT ·conjAVX512(SB), NOSPLIT, $0-72
+TEXT ·conjAVX512(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -1056,7 +1056,7 @@ conj_avx512_done:
     RET
 
 // func conjAVX(dst, a []complex128)
-TEXT ·conjAVX(SB), NOSPLIT, $0-72
+TEXT ·conjAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
@@ -1086,7 +1086,7 @@ conj_avx_done:
     RET
 
 // func conjSSE2(dst, a []complex128)
-TEXT ·conjSSE2(SB), NOSPLIT, $0-72
+TEXT ·conjSSE2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
     MOVQ a_base+24(FP), SI
