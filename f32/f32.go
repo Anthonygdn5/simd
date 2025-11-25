@@ -538,3 +538,35 @@ func ExpInPlace(a []float32) {
 	}
 	exp32(a, a)
 }
+
+// Int32ToFloat32Scale converts int32 samples to float32 and scales in one pass.
+// dst[i] = float32(src[i]) * scale
+//
+// This is optimized for audio processing where PCM samples need to be converted
+// to normalized floating-point. For example, 16-bit audio uses scale = 1.0/32768.0
+// and 32-bit audio uses scale = 1.0/2147483648.0.
+//
+// Processes min(len(dst), len(src)) elements.
+//
+// Uses AVX on AMD64 (8x int32), NEON on ARM64 (4x int32).
+func Int32ToFloat32Scale(dst []float32, src []int32, scale float32) {
+	n := min(len(dst), len(src))
+	if n == 0 {
+		return
+	}
+	int32ToFloat32Scale(dst[:n], src[:n], scale)
+}
+
+// Int32ToFloat32ScaleUnsafe converts int32 samples to float32 and scales without
+// length validation. This is a low-overhead variant for performance-critical code paths.
+//
+// PRECONDITIONS (caller must ensure):
+//   - len(dst) >= len(src)
+//   - len(src) > 0
+//
+// Violating these preconditions results in undefined behavior.
+// Use Int32ToFloat32Scale for safe operation with automatic length handling.
+func Int32ToFloat32ScaleUnsafe(dst []float32, src []int32, scale float32) {
+	// Slice dst to len(src) to ensure SIMD implementations don't read past src
+	int32ToFloat32Scale(dst[:len(src)], src, scale)
+}

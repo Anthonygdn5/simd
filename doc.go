@@ -50,7 +50,7 @@
 //
 // Activation functions: Sigmoid, ReLU, Tanh, Exp, ClampScale
 //
-// Audio DSP: Interleave2, Deinterleave2, ConvolveValid, ConvolveValidMulti, AccumulateAdd, CumulativeSum, CubicInterpDot
+// Audio DSP: Interleave2, Deinterleave2, ConvolveValid, ConvolveValidMulti, AccumulateAdd, CumulativeSum, CubicInterpDot, Int32ToFloat32Scale
 //
 // Complex (c128): Add, Sub, Mul, MulConj, Conj, Abs, AbsSq, Scale
 //

@@ -3238,3 +3238,48 @@ tanh32_scalar_store:
 tanh32_done:
     VZEROUPPER
     RET
+
+// func int32ToFloat32ScaleAVX(dst []float32, src []int32, scale float32)
+// Converts int32 samples to float32 and multiplies by scale in one pass.
+// dst[i] = float32(src[i]) * scale
+// Optimized for audio PCM conversion (e.g., scale = 1.0/32768 for 16-bit).
+// Frame: dst(24) + src(24) + scale(4) = 52 bytes
+TEXT ·int32ToFloat32ScaleAVX(SB), NOSPLIT, $0-52
+    MOVQ dst_base+0(FP), DX        // DX = dst pointer
+    MOVQ dst_len+8(FP), CX         // CX = length
+    MOVQ src_base+24(FP), SI       // SI = src pointer
+
+    // Broadcast scale to all 8 lanes
+    VBROADCASTSS scale+48(FP), Y2  // Y2 = {scale, scale, ..., scale}
+
+    // Process 8 int32 elements per iteration
+    MOVQ CX, AX
+    SHRQ $3, AX                    // len / 8
+    JZ   i32tof32_remainder
+
+i32tof32_loop8:
+    VMOVDQU (SI), Y0               // Y0 = 8 x int32
+    VCVTDQ2PS Y0, Y1               // Y1 = convert int32 to float32
+    VMULPS Y2, Y1, Y1              // Y1 = Y1 * scale
+    VMOVUPS Y1, (DX)               // store 8 x float32
+    ADDQ $32, SI
+    ADDQ $32, DX
+    DECQ AX
+    JNZ  i32tof32_loop8
+
+i32tof32_remainder:
+    ANDQ $7, CX                    // remainder = len % 8
+    JZ   i32tof32_done
+
+i32tof32_scalar:
+    VCVTSI2SSL (SI), X0, X0        // convert single int32 to float32
+    VMULSS X2, X0, X0              // X0 = X0 * scale
+    VMOVSS X0, (DX)                // store float32
+    ADDQ $4, SI
+    ADDQ $4, DX
+    DECQ CX
+    JNZ  i32tof32_scalar
+
+i32tof32_done:
+    VZEROUPPER
+    RET

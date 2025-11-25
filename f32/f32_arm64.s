@@ -1305,3 +1305,54 @@ clampscale32_neon_scalar_loop:
 
 clampscale32_neon_done:
     RET
+
+// func int32ToFloat32ScaleNEON(dst []float32, src []int32, scale float32)
+// Converts int32 samples to float32 and multiplies by scale in one pass.
+// dst[i] = float32(src[i]) * scale
+// Optimized for audio PCM conversion (e.g., scale = 1.0/32768 for 16-bit).
+//
+// NEON opcodes:
+// SCVTF Vd.4S, Vn.4S: 0x4E21D800 | (Vn << 5) | Vd  (signed int32 to float32)
+// FMUL Vd.4S, Vn.4S, Vm.4S: 0x6E20DC00 | (Vm << 16) | (Vn << 5) | Vd
+//
+// Frame: dst(24) + src(24) + scale(4) = 52 bytes
+TEXT ·int32ToFloat32ScaleNEON(SB), NOSPLIT, $0-52
+    MOVD dst_base+0(FP), R0        // R0 = dst pointer
+    MOVD dst_len+8(FP), R3         // R3 = length
+    MOVD src_base+24(FP), R1       // R1 = src pointer
+    FMOVS scale+48(FP), F2         // F2 = scale
+
+    // Broadcast scale to all 4 lanes
+    // DUP V2.4S, V2.S[0]: 0x4E040400 | (Vn << 5) | Vd
+    WORD $0x4E040442               // DUP V2.4S, V2.S[0]
+
+    // Process 4 int32 elements per iteration
+    LSR $2, R3, R4                 // R4 = len / 4
+    CBZ R4, i32tof32_neon_scalar
+
+i32tof32_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]         // V0 = 4 x int32
+    // SCVTF V1.4S, V0.4S - convert signed int32 to float32
+    WORD $0x4E21D801               // SCVTF V1.4S, V0.4S
+    // FMUL V1.4S, V1.4S, V2.4S - multiply by scale
+    WORD $0x6E22DC21               // FMUL V1.4S, V1.4S, V2.4S
+    VST1.P [V1.S4], 16(R0)         // store 4 x float32
+    SUB $1, R4
+    CBNZ R4, i32tof32_neon_loop4
+
+i32tof32_neon_scalar:
+    AND $3, R3                     // remainder = len % 4
+    CBZ R3, i32tof32_neon_done
+
+i32tof32_neon_scalar_loop:
+    MOVW (R1), R5                  // Load int32
+    SCVTFWS R5, F0                 // Convert int32 to float32
+    FMULS F2, F0, F0               // F0 = F0 * scale
+    FMOVS F0, (R0)                 // Store float32
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R3
+    CBNZ R3, i32tof32_neon_scalar_loop
+
+i32tof32_neon_done:
+    RET

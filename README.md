@@ -11,7 +11,7 @@ A high-performance SIMD (Single Instruction, Multiple Data) library for Go provi
 - **Pure Go assembly** - Native Go assembler, simple cross-compilation
 - **Runtime CPU detection** - Automatically selects optimal implementation (AVX-512, AVX+FMA, SSE2, NEON, or pure Go)
 - **Zero allocations** - All operations work on pre-allocated slices
-- **45 operations** - Arithmetic, reduction, statistical, vector, signal processing, activation functions, and complex number operations
+- **46 operations** - Arithmetic, reduction, statistical, vector, signal processing, activation functions, and complex number operations
 - **Multi-architecture** - AMD64 (AVX-512/AVX+FMA/SSE2) and ARM64 (NEON) with pure Go fallback
 - **Thread-safe** - All functions are safe for concurrent use
 
@@ -119,6 +119,7 @@ fmt.Println(cpu.HasNEON())   // true/false
 | **Audio**       | `Interleave2(dst, a, b)`            | Pack stereo: [L,R,L,R,...]    | 4x / 2x                             |
 |                 | `Deinterleave2(a, b, src)`          | Unpack stereo to channels     | 4x / 2x                             |
 |                 | `CubicInterpDot(hist,a,b,c,d,x)`    | Fused cubic interp dot product| 4x / 2x                             |
+|                 | `Int32ToFloat32Scale(dst,src,s)`    | PCM int32 to normalized float | 8x / 4x                             |
 
 ### `f32` - float32 Operations
 
@@ -269,6 +270,8 @@ c128.Abs(magnitude, signalFFT)                  // Extract magnitude for display
 | ConvolveValidMulti (f64) | 1000 sig × 64 ker × 2 | 13.4 µs | -       | -        |
 | CubicInterpDot (f64)     | 241 taps              | 47 ns   | 88 ns   | **1.9x** |
 | CubicInterpDot (f32)     | 241 taps              | 21 ns   | 66 ns   | **3.1x** |
+| Int32ToFloat32Scale      | 1024 elements         | 40 ns   | 364 ns  | **9.0x** |
+| Int32ToFloat32Scale      | 4096 elements         | 153 ns  | 1439 ns | **9.4x** |
 | Interleave2 (f64)        | 1000 pairs            | 216 ns  | -       | -        |
 | Deinterleave2 (f64)      | 1000 pairs            | 216 ns  | -       | -        |
 | Interleave2 (f32)        | 1000 pairs            | 109 ns  | -       | -        |

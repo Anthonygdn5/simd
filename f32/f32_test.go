@@ -1,6 +1,7 @@
 package f32
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -1503,4 +1504,141 @@ func benchmarkCubicInterpDot32(b *testing.B, n int) {
 		result = CubicInterpDot(hist, a, coefB, c, d, x)
 	}
 	_ = result
+}
+
+// =============================================================================
+// Int32ToFloat32Scale Tests
+// =============================================================================
+
+func TestInt32ToFloat32Scale(t *testing.T) {
+	testCases := []struct {
+		name  string
+		src   []int32
+		scale float32
+	}{
+		{"empty", nil, 1.0},
+		{"single", []int32{32767}, 1.0 / 32768.0},
+		{"four", []int32{-32768, -16384, 0, 32767}, 1.0 / 32768.0},
+		{"eight", []int32{-32768, -16384, -8192, 0, 8192, 16384, 32767, -1}, 1.0 / 32768.0},
+		{"nine", []int32{-32768, -16384, -8192, 0, 8192, 16384, 32767, -1, 100}, 1.0 / 32768.0},
+		{"sixteen", make([]int32, 16), 1.0 / 32768.0},
+		{"seventeen", make([]int32, 17), 1.0 / 32768.0},
+		{"audio_16bit", []int32{-32768, 0, 32767, -16384, 16384, -8192, 8192, 0}, 1.0 / 32768.0},
+		{"audio_32bit", []int32{-2147483648, 0, 2147483647, -1073741824, 1073741824}, 1.0 / 2147483648.0},
+	}
+
+	// Initialize test data for sized test cases
+	for i := range testCases {
+		if testCases[i].name == "sixteen" || testCases[i].name == "seventeen" {
+			for j := range testCases[i].src {
+				testCases[i].src[j] = int32((j - len(testCases[i].src)/2) * 1000)
+			}
+		}
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.src) == 0 {
+				dst := make([]float32, 0)
+				Int32ToFloat32Scale(dst, tc.src, tc.scale)
+				return
+			}
+
+			dst := make([]float32, len(tc.src))
+			Int32ToFloat32Scale(dst, tc.src, tc.scale)
+
+			// Verify results
+			for i, v := range dst {
+				want := float32(tc.src[i]) * tc.scale
+				if math.Abs(float64(v-want)) > 1e-6 {
+					t.Errorf("Int32ToFloat32Scale()[%d] = %v, want %v", i, v, want)
+				}
+			}
+		})
+	}
+}
+
+func TestInt32ToFloat32Scale_Large(t *testing.T) {
+	// Test with large array that exercises SIMD paths
+	sizes := []int{100, 1000, 10000}
+
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {
+			src := make([]int32, size)
+			dst := make([]float32, size)
+			scale := float32(1.0 / 32768.0)
+
+			// Fill with test data
+			for i := range src {
+				src[i] = int32((i%65536 - 32768) * 2)
+			}
+
+			Int32ToFloat32Scale(dst, src, scale)
+
+			// Verify results
+			for i := range dst {
+				want := float32(src[i]) * scale
+				if math.Abs(float64(dst[i]-want)) > 1e-5 {
+					t.Errorf("Int32ToFloat32Scale()[%d] = %v, want %v", i, dst[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestInt32ToFloat32Scale_AudioConversion(t *testing.T) {
+	// Test realistic audio conversion scenarios
+
+	t.Run("16bit_audio", func(t *testing.T) {
+		// 16-bit signed audio: range [-32768, 32767]
+		src := []int32{-32768, -16384, -8192, 0, 8192, 16384, 32767}
+		dst := make([]float32, len(src))
+		scale := float32(1.0 / 32768.0)
+
+		Int32ToFloat32Scale(dst, src, scale)
+
+		// Verify conversion
+		expected := []float32{-1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 0.999969482} // 32767/32768
+		for i := range dst {
+			if math.Abs(float64(dst[i]-expected[i])) > 1e-5 {
+				t.Errorf("16bit[%d]: got %v, want %v", i, dst[i], expected[i])
+			}
+		}
+	})
+
+	t.Run("32bit_audio", func(t *testing.T) {
+		// 32-bit signed audio: range [-2147483648, 2147483647]
+		src := []int32{-2147483648, 0, 2147483647}
+		dst := make([]float32, len(src))
+		scale := float32(1.0 / 2147483648.0)
+
+		Int32ToFloat32Scale(dst, src, scale)
+
+		// Verify conversion
+		if dst[0] != -1.0 {
+			t.Errorf("32bit min: got %v, want -1.0", dst[0])
+		}
+		if dst[1] != 0.0 {
+			t.Errorf("32bit zero: got %v, want 0.0", dst[1])
+		}
+		// 2147483647/2147483648 ≈ 0.999999999534
+		if math.Abs(float64(dst[2]-0.9999999995)) > 1e-6 {
+			t.Errorf("32bit max: got %v, want ~0.9999999995", dst[2])
+		}
+	})
+}
+
+func TestInt32ToFloat32ScaleUnsafe(t *testing.T) {
+	src := []int32{-32768, 0, 32767, -16384, 16384, -8192, 8192, 0}
+	dst := make([]float32, len(src))
+	scale := float32(1.0 / 32768.0)
+
+	Int32ToFloat32ScaleUnsafe(dst, src, scale)
+
+	for i := range dst {
+		want := float32(src[i]) * scale
+		if math.Abs(float64(dst[i]-want)) > 1e-6 {
+			t.Errorf("Int32ToFloat32ScaleUnsafe()[%d] = %v, want %v", i, dst[i], want)
+		}
+	}
 }

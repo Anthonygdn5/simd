@@ -352,3 +352,28 @@ func exp32Go(dst, src []float32) {
 		}
 	}
 }
+
+// int32ToFloat32ScaleGo converts int32 samples to float32 and scales.
+// dst[i] = float32(src[i]) * scale
+// Uses loop unrolling for better performance.
+func int32ToFloat32ScaleGo(dst []float32, src []int32, scale float32) {
+	n := len(src)
+	n8 := n &^ unrollMask // Round down to multiple of 8
+
+	// Unrolled loop: 8 elements per iteration
+	for i := 0; i < n8; i += 8 {
+		dst[i] = float32(src[i]) * scale
+		dst[i+1] = float32(src[i+1]) * scale
+		dst[i+2] = float32(src[i+2]) * scale
+		dst[i+3] = float32(src[i+3]) * scale
+		dst[i+4] = float32(src[i+4]) * scale
+		dst[i+5] = float32(src[i+5]) * scale
+		dst[i+6] = float32(src[i+6]) * scale
+		dst[i+7] = float32(src[i+7]) * scale
+	}
+
+	// Handle remainder
+	for i := n8; i < n; i++ {
+		dst[i] = float32(src[i]) * scale
+	}
+}

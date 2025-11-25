@@ -537,3 +537,15 @@ func exp32(dst, src []float32) {
 	// Can be optimized with AVX polynomial approximation later
 	exp32Go(dst, src)
 }
+
+func int32ToFloat32Scale(dst []float32, src []int32, scale float32) {
+	// Use AVX if available and have enough elements
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		int32ToFloat32ScaleAVX(dst, src, scale)
+		return
+	}
+	int32ToFloat32ScaleGo(dst, src, scale)
+}
+
+//go:noescape
+func int32ToFloat32ScaleAVX(dst []float32, src []int32, scale float32)
