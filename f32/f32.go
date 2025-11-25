@@ -567,5 +567,6 @@ func Int32ToFloat32Scale(dst []float32, src []int32, scale float32) {
 // Violating these preconditions results in undefined behavior.
 // Use Int32ToFloat32Scale for safe operation with automatic length handling.
 func Int32ToFloat32ScaleUnsafe(dst []float32, src []int32, scale float32) {
-	int32ToFloat32Scale(dst, src, scale)
+	// Slice dst to len(src) to ensure SIMD implementations don't read past src
+	int32ToFloat32Scale(dst[:len(src)], src, scale)
 }
