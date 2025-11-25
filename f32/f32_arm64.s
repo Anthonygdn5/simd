@@ -1052,17 +1052,16 @@ sigmoid32_neon_loop4:
     VLD1.P 16(R1), [V0.S4]        // V0 = x
 
     // Negate: V0 = -x
-    WORD $0x6EA0F800              // FNEG V0.4S, V0.4S
+    WORD $0x6EA07C00              // FNEG V0.4S, V0.4S
 
     // Clamp -x to [-20, 20]
-    WORD $0x4E3BF400              // FMIN V0.4S, V0.4S, V27.4S  (clamp upper to 20)
-    WORD $0x4E38F400              // FMAX V0.4S, V0.4S, V28.4S  (clamp lower to -20)
+    WORD $0x4EBBF400              // FMIN V0.4S, V0.4S, V27.4S  (clamp upper to 20)
+    WORD $0x4E3CF400              // FMAX V0.4S, V0.4S, V28.4S  (clamp lower to -20)
 
     // Range reduction: k = round(-x * log2e), r = -x - k * ln2
     WORD $0x6E34DC01              // FMUL V1.4S, V0.4S, V20.4S   V1 = -x * log2e
-    WORD $0x4EA19822              // FRINTN V2.4S, V1.4S        V2 = k = round(V1)
-    WORD $0x4E35CC43              // FMLS V3.4S, V2.4S, V21.4S  would need setup
-    // Simpler: V3 = V0 - V2 * ln2
+    WORD $0x4E218C22              // FRINTN V2.4S, V1.4S         V2 = k = round(V1)
+    // V3 = V0 - V2 * ln2
     WORD $0x6E35DC44              // FMUL V4.4S, V2.4S, V21.4S   V4 = k * ln2
     WORD $0x4EA4D403              // FSUB V3.4S, V0.4S, V4.4S    V3 = r = -x - k * ln2
 
@@ -1081,10 +1080,10 @@ sigmoid32_neon_loop4:
 
     // Reconstruct: exp(-x) = exp(r) * 2^k
     // Convert k to int, shift to exponent position, add to 1.0's bits
-    WORD $0x4EA1A841              // FCVTZS V1.4S, V2.4S        V1 = int(k)
-    WORD $0x4F575C21              // SHL V1.4S, V1.4S, #23      V1 = k << 23
-    WORD $0x4EA18421              // ADD V1.4S, V1.4S, V22.4S   V1 = 2^k (add 1.0's bits)
-    WORD $0x6E21DC84              // FMUL V4.4S, V4.4S, V1.4S   V4 = exp(-x) = exp(r) * 2^k
+    WORD $0x4EA1B841              // FCVTZS V1.4S, V2.4S         V1 = int(k)
+    WORD $0x4F375421              // SHL V1.4S, V1.4S, #23       V1 = k << 23
+    WORD $0x4EB68421              // ADD V1.4S, V1.4S, V22.4S    V1 = 2^k (add 1.0's bits)
+    WORD $0x6E21DC84              // FMUL V4.4S, V4.4S, V1.4S    V4 = exp(-x) = exp(r) * 2^k
 
     // Sigmoid: 1 / (1 + exp(-x))
     WORD $0x4E36D484              // FADD V4.4S, V4.4S, V22.4S   V4 = 1 + exp(-x)
