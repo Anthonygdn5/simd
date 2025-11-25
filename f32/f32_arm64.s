@@ -994,18 +994,55 @@ cubic32_neon_done:
     RET
 
 // func sigmoidNEON(dst, src []float32)
-// Implements fast sigmoid approximation: σ(x) ≈ 0.5 + 0.5 * x / (1 + |x|)
-// This approximation is SIMD-friendly and commonly used in neural networks.
+// Computes accurate sigmoid: σ(x) = 1 / (1 + exp(-x))
+// Uses range reduction and polynomial approximation for exp.
 TEXT ·sigmoidNEON(SB), NOSPLIT, $0-48
     MOVD dst_base+0(FP), R0
     MOVD dst_len+8(FP), R3
     MOVD src_base+24(FP), R1
 
     // Load constants into vector registers
-    FMOVS $0.5, F30
-    FMOVS $1.0, F31
-    VDUP V30.S[0], V30.S4         // V30 = {0.5, 0.5, 0.5, 0.5}
-    VDUP V31.S[0], V31.S4         // V31 = {1.0, 1.0, 1.0, 1.0}
+    // log2(e) = 1.442695041 = 0x3fb8aa3b
+    MOVW $0x3fb8aa3b, R10
+    VMOV R10, V20.S[0]
+    VDUP V20.S[0], V20.S4         // V20 = log2(e)
+
+    // ln(2) = 0.693147181 = 0x3f317218
+    MOVW $0x3f317218, R10
+    VMOV R10, V21.S[0]
+    VDUP V21.S[0], V21.S4         // V21 = ln(2)
+
+    // 1.0 = 0x3f800000
+    FMOVS $1.0, F22
+    VDUP V22.S[0], V22.S4         // V22 = 1.0
+
+    // Polynomial coefficients: c2=0.5, c3=1/6, c4=1/24, c5=1/120
+    FMOVS $0.5, F23
+    VDUP V23.S[0], V23.S4         // V23 = c2 = 0.5
+
+    // c3 = 1/6 = 0x3e2aaaab
+    MOVW $0x3e2aaaab, R10
+    VMOV R10, V24.S[0]
+    VDUP V24.S[0], V24.S4         // V24 = c3 = 1/6
+
+    // c4 = 1/24 = 0x3d2aaaab
+    MOVW $0x3d2aaaab, R10
+    VMOV R10, V25.S[0]
+    VDUP V25.S[0], V25.S4         // V25 = c4 = 1/24
+
+    // c5 = 1/120 = 0x3c088889
+    MOVW $0x3c088889, R10
+    VMOV R10, V26.S[0]
+    VDUP V26.S[0], V26.S4         // V26 = c5 = 1/120
+
+    // Clamp thresholds: ±20.0 = 0x41a00000 / 0xc1a00000
+    MOVW $0x41a00000, R10
+    VMOV R10, V27.S[0]
+    VDUP V27.S[0], V27.S4         // V27 = 20.0 (clamp_hi)
+
+    MOVW $0xc1a00000, R10
+    VMOV R10, V28.S[0]
+    VDUP V28.S[0], V28.S4         // V28 = -20.0 (clamp_lo)
 
     // Process 4 elements per iteration
     LSR $2, R3, R4
@@ -1013,12 +1050,47 @@ TEXT ·sigmoidNEON(SB), NOSPLIT, $0-48
 
 sigmoid32_neon_loop4:
     VLD1.P 16(R1), [V0.S4]        // V0 = x
-    WORD $0x4EA0F801              // FABS V1.4S, V0.4S -> V1 = |x|
-    WORD $0x4E3FD422              // FADD V2.4S, V1.4S, V31.4S -> V2 = 1 + |x|
-    WORD $0x6E22FC03              // FDIV V3.4S, V0.4S, V2.4S -> V3 = x / (1 + |x|)
-    WORD $0x6E3EDC64              // FMUL V4.4S, V3.4S, V30.4S -> V4 = 0.5 * x / (1 + |x|)
-    WORD $0x4E3ED485              // FADD V5.4S, V4.4S, V30.4S -> V5 = 0.5 + result
-    VST1.P [V5.S4], 16(R0)        // store result
+
+    // Negate: V0 = -x
+    WORD $0x6EA0F800              // FNEG V0.4S, V0.4S
+
+    // Clamp -x to [-20, 20]
+    WORD $0x4E3BF400              // FMIN V0.4S, V0.4S, V27.4S  (clamp upper to 20)
+    WORD $0x4E38F400              // FMAX V0.4S, V0.4S, V28.4S  (clamp lower to -20)
+
+    // Range reduction: k = round(-x * log2e), r = -x - k * ln2
+    WORD $0x6E34DC01              // FMUL V1.4S, V0.4S, V20.4S   V1 = -x * log2e
+    WORD $0x4EA19822              // FRINTN V2.4S, V1.4S        V2 = k = round(V1)
+    WORD $0x4E35CC43              // FMLS V3.4S, V2.4S, V21.4S  would need setup
+    // Simpler: V3 = V0 - V2 * ln2
+    WORD $0x6E35DC44              // FMUL V4.4S, V2.4S, V21.4S   V4 = k * ln2
+    WORD $0x4EA4D403              // FSUB V3.4S, V0.4S, V4.4S    V3 = r = -x - k * ln2
+
+    // Polynomial: exp(r) ≈ 1 + r*(1 + r*(c2 + r*(c3 + r*(c4 + r*c5))))
+    // Horner's method
+    WORD $0x6E3ADC64              // FMUL V4.4S, V3.4S, V26.4S   V4 = r * c5
+    WORD $0x4E39D484              // FADD V4.4S, V4.4S, V25.4S   V4 = c4 + r*c5
+    WORD $0x6E23DC84              // FMUL V4.4S, V4.4S, V3.4S    V4 = r*(c4 + r*c5)
+    WORD $0x4E38D484              // FADD V4.4S, V4.4S, V24.4S   V4 = c3 + r*(...)
+    WORD $0x6E23DC84              // FMUL V4.4S, V4.4S, V3.4S    V4 = r*(c3 + ...)
+    WORD $0x4E37D484              // FADD V4.4S, V4.4S, V23.4S   V4 = c2 + r*(...)
+    WORD $0x6E23DC84              // FMUL V4.4S, V4.4S, V3.4S    V4 = r*(c2 + ...)
+    WORD $0x4E36D484              // FADD V4.4S, V4.4S, V22.4S   V4 = 1 + r*(...)
+    WORD $0x6E23DC84              // FMUL V4.4S, V4.4S, V3.4S    V4 = r*(1 + ...)
+    WORD $0x4E36D484              // FADD V4.4S, V4.4S, V22.4S   V4 = exp(r)
+
+    // Reconstruct: exp(-x) = exp(r) * 2^k
+    // Convert k to int, shift to exponent position, add to 1.0's bits
+    WORD $0x4EA1A841              // FCVTZS V1.4S, V2.4S        V1 = int(k)
+    WORD $0x4F575C21              // SHL V1.4S, V1.4S, #23      V1 = k << 23
+    WORD $0x4EA18421              // ADD V1.4S, V1.4S, V22.4S   V1 = 2^k (add 1.0's bits)
+    WORD $0x6E21DC84              // FMUL V4.4S, V4.4S, V1.4S   V4 = exp(-x) = exp(r) * 2^k
+
+    // Sigmoid: 1 / (1 + exp(-x))
+    WORD $0x4E36D484              // FADD V4.4S, V4.4S, V22.4S   V4 = 1 + exp(-x)
+    WORD $0x6E24FEC0              // FDIV V0.4S, V22.4S, V4.4S   V0 = 1 / (1 + exp(-x))
+
+    VST1.P [V0.S4], 16(R0)        // store result
 
     SUB $1, R4
     CBNZ R4, sigmoid32_neon_loop4
@@ -1028,13 +1100,63 @@ sigmoid32_neon_scalar:
     CBZ R3, sigmoid32_neon_done
 
 sigmoid32_neon_scalar_loop:
+    // Scalar path uses pure Go fallback approach
     FMOVS (R1), F0                // F0 = x
-    FABSS F0, F1                  // F1 = |x|
-    FADDS F31, F1, F2             // F2 = 1 + |x|
-    FDIVS F2, F0, F3              // F3 = x / (1 + |x|)
-    FMULS F30, F3, F4             // F4 = 0.5 * x / (1 + |x|)
-    FADDS F30, F4, F5             // F5 = 0.5 + result
-    FMOVS F5, (R0)                // store result
+    FNEGS F0, F0                  // F0 = -x
+
+    // Clamp
+    FMOVS $20.0, F1
+    FMOVS $-20.0, F2
+    FMINS F1, F0, F0
+    FMAXS F2, F0, F0
+
+    // Range reduction
+    // log2e = 1.442695041
+    MOVW $0x3fb8aa3b, R10
+    FMOVS R10, F8
+    FMULS F8, F0, F1              // F1 = -x * log2e
+    FRINTNS F1, F2                // F2 = k = round(F1)
+
+    // ln2 = 0.693147181
+    MOVW $0x3f317218, R10
+    FMOVS R10, F9
+    FMULS F9, F2, F3              // F3 = k * ln2
+    FSUBS F3, F0, F0              // F0 = r = -x - k * ln2
+
+    // Polynomial coefficients
+    FMOVS $1.0, F10               // c1 = 1.0
+    FMOVS $0.5, F11               // c2 = 0.5
+    MOVW $0x3e2aaaab, R10
+    FMOVS R10, F12                // c3 = 1/6
+    MOVW $0x3d2aaaab, R10
+    FMOVS R10, F13                // c4 = 1/24
+    MOVW $0x3c088889, R10
+    FMOVS R10, F14                // c5 = 1/120
+
+    // Horner's method
+    FMULS F0, F14, F4             // F4 = r * c5
+    FADDS F13, F4, F4             // F4 = c4 + r*c5
+    FMULS F0, F4, F4              // F4 = r*(c4 + r*c5)
+    FADDS F12, F4, F4             // F4 = c3 + r*(...)
+    FMULS F0, F4, F4
+    FADDS F11, F4, F4             // F4 = c2 + r*(...)
+    FMULS F0, F4, F4
+    FADDS F10, F4, F4             // F4 = 1 + r*(...)
+    FMULS F0, F4, F4
+    FADDS F10, F4, F4             // F4 = exp(r)
+
+    // Reconstruct 2^k
+    FCVTZSS F2, R10               // R10 = int(k)
+    LSL $23, R10, R10             // R10 = k << 23
+    MOVW $0x3f800000, R11
+    ADD R11, R10, R10             // R10 = 2^k bits
+    FMOVS R10, F5
+    FMULS F5, F4, F4              // F4 = exp(-x)
+
+    // Sigmoid
+    FADDS F10, F4, F4             // F4 = 1 + exp(-x)
+    FDIVS F4, F10, F0             // F0 = 1 / (1 + exp(-x))
+    FMOVS F0, (R0)                // store result
 
     ADD $4, R0
     ADD $4, R1

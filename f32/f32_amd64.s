@@ -2780,39 +2780,159 @@ cubic32_avx_done:
     VZEROUPPER
     RET
 
-// Constants for sigmoid
-DATA sigmoid_half<>+0x00(SB)/4, $0x3f000000  // 0.5
-DATA sigmoid_half<>+0x04(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x08(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x0c(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x10(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x14(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x18(SB)/4, $0x3f000000
-DATA sigmoid_half<>+0x1c(SB)/4, $0x3f000000
-GLOBL sigmoid_half<>(SB), RODATA|NOPTR, $32
+// Constants for exp/sigmoid computation using range reduction + polynomial
+// exp(x) = 2^k * exp(r) where k = round(x * log2e), r = x - k * ln2
+// Then polynomial approximation for exp(r) on [-ln2/2, ln2/2]
 
-DATA sigmoid_one<>+0x00(SB)/4, $0x3f800000  // 1.0
-DATA sigmoid_one<>+0x04(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x08(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x0c(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x10(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x14(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x18(SB)/4, $0x3f800000
-DATA sigmoid_one<>+0x1c(SB)/4, $0x3f800000
-GLOBL sigmoid_one<>(SB), RODATA|NOPTR, $32
+// log2(e) = 1/ln(2) ≈ 1.442695041
+DATA exp_log2e<>+0x00(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x04(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x08(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x0c(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x10(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x14(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x18(SB)/4, $0x3fb8aa3b
+DATA exp_log2e<>+0x1c(SB)/4, $0x3fb8aa3b
+GLOBL exp_log2e<>(SB), RODATA|NOPTR, $32
+
+// ln(2) ≈ 0.693147181
+DATA exp_ln2<>+0x00(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x04(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x08(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x0c(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x10(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x14(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x18(SB)/4, $0x3f317218
+DATA exp_ln2<>+0x1c(SB)/4, $0x3f317218
+GLOBL exp_ln2<>(SB), RODATA|NOPTR, $32
+
+// 0.5 for rounding
+DATA exp_half<>+0x00(SB)/4, $0x3f000000
+DATA exp_half<>+0x04(SB)/4, $0x3f000000
+DATA exp_half<>+0x08(SB)/4, $0x3f000000
+DATA exp_half<>+0x0c(SB)/4, $0x3f000000
+DATA exp_half<>+0x10(SB)/4, $0x3f000000
+DATA exp_half<>+0x14(SB)/4, $0x3f000000
+DATA exp_half<>+0x18(SB)/4, $0x3f000000
+DATA exp_half<>+0x1c(SB)/4, $0x3f000000
+GLOBL exp_half<>(SB), RODATA|NOPTR, $32
+
+// 1.0
+DATA exp_one<>+0x00(SB)/4, $0x3f800000
+DATA exp_one<>+0x04(SB)/4, $0x3f800000
+DATA exp_one<>+0x08(SB)/4, $0x3f800000
+DATA exp_one<>+0x0c(SB)/4, $0x3f800000
+DATA exp_one<>+0x10(SB)/4, $0x3f800000
+DATA exp_one<>+0x14(SB)/4, $0x3f800000
+DATA exp_one<>+0x18(SB)/4, $0x3f800000
+DATA exp_one<>+0x1c(SB)/4, $0x3f800000
+GLOBL exp_one<>(SB), RODATA|NOPTR, $32
+
+// Polynomial coefficients for exp(r) ≈ 1 + r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5
+// c2 = 0.5
+DATA exp_c2<>+0x00(SB)/4, $0x3f000000
+DATA exp_c2<>+0x04(SB)/4, $0x3f000000
+DATA exp_c2<>+0x08(SB)/4, $0x3f000000
+DATA exp_c2<>+0x0c(SB)/4, $0x3f000000
+DATA exp_c2<>+0x10(SB)/4, $0x3f000000
+DATA exp_c2<>+0x14(SB)/4, $0x3f000000
+DATA exp_c2<>+0x18(SB)/4, $0x3f000000
+DATA exp_c2<>+0x1c(SB)/4, $0x3f000000
+GLOBL exp_c2<>(SB), RODATA|NOPTR, $32
+
+// c3 = 1/6 ≈ 0.16666667
+DATA exp_c3<>+0x00(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x04(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x08(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x0c(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x10(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x14(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x18(SB)/4, $0x3e2aaaab
+DATA exp_c3<>+0x1c(SB)/4, $0x3e2aaaab
+GLOBL exp_c3<>(SB), RODATA|NOPTR, $32
+
+// c4 = 1/24 ≈ 0.041666668
+DATA exp_c4<>+0x00(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x04(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x08(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x0c(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x10(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x14(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x18(SB)/4, $0x3d2aaaab
+DATA exp_c4<>+0x1c(SB)/4, $0x3d2aaaab
+GLOBL exp_c4<>(SB), RODATA|NOPTR, $32
+
+// c5 = 1/120 ≈ 0.008333334
+DATA exp_c5<>+0x00(SB)/4, $0x3c088889
+DATA exp_c5<>+0x04(SB)/4, $0x3c088889
+DATA exp_c5<>+0x08(SB)/4, $0x3c088889
+DATA exp_c5<>+0x0c(SB)/4, $0x3c088889
+DATA exp_c5<>+0x10(SB)/4, $0x3c088889
+DATA exp_c5<>+0x14(SB)/4, $0x3c088889
+DATA exp_c5<>+0x18(SB)/4, $0x3c088889
+DATA exp_c5<>+0x1c(SB)/4, $0x3c088889
+GLOBL exp_c5<>(SB), RODATA|NOPTR, $32
+
+// Clamp threshold for sigmoid: beyond ±20, sigmoid saturates to 0 or 1
+DATA sigmoid_clamp_hi<>+0x00(SB)/4, $0x41a00000  // 20.0
+DATA sigmoid_clamp_hi<>+0x04(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x08(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x0c(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x10(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x14(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x18(SB)/4, $0x41a00000
+DATA sigmoid_clamp_hi<>+0x1c(SB)/4, $0x41a00000
+GLOBL sigmoid_clamp_hi<>(SB), RODATA|NOPTR, $32
+
+DATA sigmoid_clamp_lo<>+0x00(SB)/4, $0xc1a00000  // -20.0
+DATA sigmoid_clamp_lo<>+0x04(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x08(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x0c(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x10(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x14(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x18(SB)/4, $0xc1a00000
+DATA sigmoid_clamp_lo<>+0x1c(SB)/4, $0xc1a00000
+GLOBL sigmoid_clamp_lo<>(SB), RODATA|NOPTR, $32
+
+// Magic number for float->int conversion: 2^23 + 2^22 = 12582912.0
+DATA exp_magic<>+0x00(SB)/4, $0x4b400000
+DATA exp_magic<>+0x04(SB)/4, $0x4b400000
+DATA exp_magic<>+0x08(SB)/4, $0x4b400000
+DATA exp_magic<>+0x0c(SB)/4, $0x4b400000
+DATA exp_magic<>+0x10(SB)/4, $0x4b400000
+DATA exp_magic<>+0x14(SB)/4, $0x4b400000
+DATA exp_magic<>+0x18(SB)/4, $0x4b400000
+DATA exp_magic<>+0x1c(SB)/4, $0x4b400000
+GLOBL exp_magic<>(SB), RODATA|NOPTR, $32
+
+// 127 << 23 = 1065353216 (exponent bias)
+DATA exp_bias<>+0x00(SB)/4, $0x3f800000  // This is 1.0 as integer = 127<<23
+DATA exp_bias<>+0x04(SB)/4, $0x3f800000
+DATA exp_bias<>+0x08(SB)/4, $0x3f800000
+DATA exp_bias<>+0x0c(SB)/4, $0x3f800000
+DATA exp_bias<>+0x10(SB)/4, $0x3f800000
+DATA exp_bias<>+0x14(SB)/4, $0x3f800000
+DATA exp_bias<>+0x18(SB)/4, $0x3f800000
+DATA exp_bias<>+0x1c(SB)/4, $0x3f800000
+GLOBL exp_bias<>(SB), RODATA|NOPTR, $32
 
 // func sigmoidAVX(dst, src []float32)
-// Implements fast sigmoid approximation: σ(x) ≈ 0.5 + 0.5 * x / (1 + |x|)
-// This approximation is SIMD-friendly and commonly used in neural networks.
+// Computes accurate sigmoid: σ(x) = 1 / (1 + exp(-x))
+// Uses range reduction and polynomial approximation for exp.
 TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DI
     MOVQ dst_len+8(FP), CX
     MOVQ src_base+24(FP), SI
 
-    // Load constants (use unaligned loads to avoid alignment faults)
-    VMOVUPS sigmoid_half<>(SB), Y8   // Y8 = 0.5
-    VMOVUPS sigmoid_one<>(SB), Y9    // Y9 = 1.0
-    VMOVUPS absf32mask<>(SB), Y10    // Y10 = abs mask
+    // Load all constants into registers
+    VMOVUPS exp_log2e<>(SB), Y8         // Y8 = log2(e)
+    VMOVUPS exp_ln2<>(SB), Y9           // Y9 = ln(2)
+    VMOVUPS exp_one<>(SB), Y10          // Y10 = 1.0
+    VMOVUPS exp_c2<>(SB), Y11           // Y11 = c2 = 0.5
+    VMOVUPS exp_c3<>(SB), Y12           // Y12 = c3 = 1/6
+    VMOVUPS exp_c4<>(SB), Y13           // Y13 = c4 = 1/24
+    VMOVUPS exp_c5<>(SB), Y14           // Y14 = c5 = 1/120
+    VMOVUPS exp_magic<>(SB), Y15        // Y15 = magic for rounding
 
     // Process 8 elements per iteration
     MOVQ CX, AX
@@ -2820,13 +2940,61 @@ TEXT ·sigmoidAVX(SB), NOSPLIT, $0-48
     JZ   sigmoid32_remainder
 
 sigmoid32_loop8:
-    VMOVUPS (SI), Y0               // Y0 = x
-    VANDPS Y10, Y0, Y1             // Y1 = |x|
-    VADDPS Y9, Y1, Y2              // Y2 = 1 + |x|
-    VDIVPS Y2, Y0, Y3              // Y3 = x / (1 + |x|)
-    VMULPS Y8, Y3, Y4              // Y4 = 0.5 * x / (1 + |x|)
-    VADDPS Y8, Y4, Y5              // Y5 = 0.5 + 0.5 * x / (1 + |x|)
-    VMOVUPS Y5, (DI)               // store result
+    // Load x and compute -x (we need exp(-x))
+    VMOVUPS (SI), Y0                    // Y0 = x
+    VXORPS Y1, Y1, Y1                   // Y1 = 0
+    VSUBPS Y0, Y1, Y0                   // Y0 = -x
+
+    // Clamp -x to [-20, 20] to prevent overflow
+    VMOVUPS sigmoid_clamp_hi<>(SB), Y1
+    VMOVUPS sigmoid_clamp_lo<>(SB), Y2
+    VMINPS Y1, Y0, Y0                   // clamp upper
+    VMAXPS Y2, Y0, Y0                   // clamp lower
+
+    // Range reduction: k = round(-x * log2e), r = -x - k * ln2
+    // Using magic number rounding: floor(x + magic) - magic
+    VMULPS Y8, Y0, Y1                   // Y1 = -x * log2e
+    VADDPS Y15, Y1, Y2                  // Y2 = -x * log2e + magic
+    VSUBPS Y15, Y2, Y3                  // Y3 = k = round(-x * log2e) as float
+
+    // r = -x - k * ln2
+    VMULPS Y9, Y3, Y4                   // Y4 = k * ln2
+    VSUBPS Y4, Y0, Y0                   // Y0 = r = -x - k * ln2
+
+    // Polynomial: exp(r) ≈ 1 + r*(1 + r*(c2 + r*(c3 + r*(c4 + r*c5))))
+    // Using Horner's method
+    VMULPS Y0, Y14, Y1                  // Y1 = r * c5
+    VADDPS Y13, Y1, Y1                  // Y1 = c4 + r*c5
+    VMULPS Y0, Y1, Y1                   // Y1 = r*(c4 + r*c5)
+    VADDPS Y12, Y1, Y1                  // Y1 = c3 + r*(c4 + r*c5)
+    VMULPS Y0, Y1, Y1                   // Y1 = r*(c3 + ...)
+    VADDPS Y11, Y1, Y1                  // Y1 = c2 + r*(c3 + ...)
+    VMULPS Y0, Y1, Y1                   // Y1 = r*(c2 + ...)
+    VADDPS Y10, Y1, Y1                  // Y1 = 1 + r*(c2 + ...)
+    VMULPS Y0, Y1, Y1                   // Y1 = r*(1 + r*(c2 + ...))
+    VADDPS Y10, Y1, Y1                  // Y1 = exp(r) ≈ 1 + r*(1 + ...)
+
+    // Reconstruct: exp(-x) = exp(r) * 2^k
+    // 2^k is computed by adding k*2^23 to the exponent bits
+    // k is already a float, convert to int by reinterpret after adding magic
+    VADDPS Y15, Y3, Y2                  // Y2 = k + magic (k is integer in float form)
+    VPSLLD $23, Y2, Y2                  // Y2 = k << 23 (shift to exponent position)
+    // Note: the magic already includes the bias adjustment via subtraction
+    // We need: 2^k where k in range [-29, 29] approximately
+    // Actually, we need to convert k to integer properly
+
+    // Simpler approach: use VCVTPS2DQ and then shift
+    VCVTPS2DQ Y3, Y4                    // Y4 = int(k)
+    VPSLLD $23, Y4, Y4                  // Y4 = k << 23
+    VPADDD Y10, Y4, Y4                  // Y4 = 2^k as float (add to 1.0's bits)
+
+    VMULPS Y4, Y1, Y1                   // Y1 = exp(-x) = exp(r) * 2^k
+
+    // Sigmoid: 1 / (1 + exp(-x))
+    VADDPS Y10, Y1, Y1                  // Y1 = 1 + exp(-x)
+    VDIVPS Y1, Y10, Y0                  // Y0 = 1 / (1 + exp(-x))
+
+    VMOVUPS Y0, (DI)                    // store result
 
     ADDQ $32, SI
     ADDQ $32, DI
@@ -2838,13 +3006,56 @@ sigmoid32_remainder:
     JZ   sigmoid32_done
 
 sigmoid32_scalar:
-    VMOVSS (SI), X0                // X0 = x
-    VANDPS X10, X0, X1             // X1 = |x|
-    VADDSS X9, X1, X2              // X2 = 1 + |x|
-    VDIVSS X2, X0, X3              // X3 = x / (1 + |x|)
-    VMULSS X8, X3, X4              // X4 = 0.5 * x / (1 + |x|)
-    VADDSS X8, X4, X5              // X5 = 0.5 + 0.5 * x / (1 + |x|)
-    VMOVSS X5, (DI)                // store result
+    // Scalar path: load single float
+    VMOVSS (SI), X0                     // X0 = x
+    VXORPS X1, X1, X1
+    VSUBSS X0, X1, X0                   // X0 = -x
+
+    // Clamp
+    VMOVSS sigmoid_clamp_hi<>(SB), X1
+    VMOVSS sigmoid_clamp_lo<>(SB), X2
+    VMINSS X1, X0, X0
+    VMAXSS X2, X0, X0
+
+    // Range reduction
+    VMOVSS exp_log2e<>(SB), X8
+    VMOVSS exp_ln2<>(SB), X9
+    VMOVSS exp_magic<>(SB), X15
+    VMULSS X8, X0, X1                   // X1 = -x * log2e
+    VADDSS X15, X1, X2
+    VSUBSS X15, X2, X3                  // X3 = k
+    VMULSS X9, X3, X4
+    VSUBSS X4, X0, X0                   // X0 = r
+
+    // Polynomial
+    VMOVSS exp_one<>(SB), X10
+    VMOVSS exp_c2<>(SB), X11
+    VMOVSS exp_c3<>(SB), X12
+    VMOVSS exp_c4<>(SB), X13
+    VMOVSS exp_c5<>(SB), X14
+
+    VMULSS X0, X14, X1
+    VADDSS X13, X1, X1
+    VMULSS X0, X1, X1
+    VADDSS X12, X1, X1
+    VMULSS X0, X1, X1
+    VADDSS X11, X1, X1
+    VMULSS X0, X1, X1
+    VADDSS X10, X1, X1
+    VMULSS X0, X1, X1
+    VADDSS X10, X1, X1                  // X1 = exp(r)
+
+    // Reconstruct 2^k
+    VCVTSS2SI X3, AX                    // AX = int(k)
+    SHLL $23, AX                        // AX = k << 23
+    ADDL $0x3f800000, AX                // AX = 2^k as float bits (add 127<<23 bias)
+    VMOVD AX, X4
+    VMULSS X4, X1, X1                   // X1 = exp(-x)
+
+    // Sigmoid
+    VADDSS X10, X1, X1
+    VDIVSS X1, X10, X0
+    VMOVSS X0, (DI)
 
     ADDQ $4, SI
     ADDQ $4, DI
@@ -2956,7 +3167,7 @@ TEXT ·tanhAVX(SB), NOSPLIT, $0-48
     MOVQ src_base+24(FP), SI
 
     // Load constants (use unaligned loads to avoid alignment faults)
-    VMOVUPS sigmoid_one<>(SB), Y2      // Y2 = 1.0 (reuse existing constant)
+    VMOVUPS exp_one<>(SB), Y2          // Y2 = 1.0
     VMOVUPS absf32mask<>(SB), Y3       // Y3 = abs mask
 
     // Create 2.5 threshold
