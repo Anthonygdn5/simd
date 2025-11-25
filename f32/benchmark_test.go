@@ -553,3 +553,33 @@ func BenchmarkSummary(b *testing.B) {
 		})
 	}
 }
+
+// =============================================================================
+// Int32ToFloat32Scale Benchmarks
+// =============================================================================
+
+func BenchmarkInt32ToFloat32Scale(b *testing.B) {
+	for _, size := range benchSizes {
+		src := make([]int32, size)
+		dst := make([]float32, size)
+		for i := range src {
+			src[i] = int32((i % 65536) - 32768)
+		}
+		scale := float32(1.0 / 32768.0)
+
+		b.Run(fmt.Sprintf("SIMD_%d", size), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Int32ToFloat32Scale(dst, src, scale)
+			}
+			// Read int32 (4 bytes) + write float32 (4 bytes) = 8 bytes per element
+			b.SetBytes(int64(size * 8))
+		})
+
+		b.Run(fmt.Sprintf("Go_%d", size), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				int32ToFloat32ScaleGo(dst, src, scale)
+			}
+			b.SetBytes(int64(size * 8))
+		})
+	}
+}

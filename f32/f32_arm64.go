@@ -343,3 +343,14 @@ func tanhNEON(dst, src []float32)
 func exp32(dst, src []float32) {
 	exp32Go(dst, src)
 }
+
+func int32ToFloat32Scale(dst []float32, src []int32, scale float32) {
+	if hasNEON && len(dst) >= 4 {
+		int32ToFloat32ScaleNEON(dst, src, scale)
+		return
+	}
+	int32ToFloat32ScaleGo(dst, src, scale)
+}
+
+//go:noescape
+func int32ToFloat32ScaleNEON(dst []float32, src []int32, scale float32)
