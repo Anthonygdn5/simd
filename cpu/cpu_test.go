@@ -31,6 +31,12 @@ func TestHasNEON(_ *testing.T) {
 	_ = got
 }
 
+// TestHasFP16 tests the HasFP16 function
+func TestHasFP16(_ *testing.T) {
+	got := HasFP16()
+	_ = got
+}
+
 // TestHasAVX512VL tests the HasAVX512VL function
 func TestHasAVX512VL(_ *testing.T) {
 	got := HasAVX512VL()
@@ -73,6 +79,7 @@ func TestFeatures(_ *testing.T) {
 
 	// Test ARM64 features struct
 	_ = ARM64.NEON
+	_ = ARM64.FP16
 	_ = ARM64.SVE
 	_ = ARM64.SVE2
 }

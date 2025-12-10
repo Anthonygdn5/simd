@@ -6,6 +6,7 @@ import "golang.org/x/sys/cpu"
 
 func init() {
 	ARM64.NEON = cpu.ARM64.HasASIMD
+	ARM64.FP16 = cpu.ARM64.HasASIMDHP // FEAT_FP16 - half-precision SIMD
 	ARM64.SVE = cpu.ARM64.HasSVE
 	ARM64.SVE2 = cpu.ARM64.HasSVE2
 }
@@ -16,6 +17,8 @@ func cpuInfo() string {
 		return "ARM64 SVE2"
 	case ARM64.SVE:
 		return "ARM64 SVE"
+	case ARM64.NEON && ARM64.FP16:
+		return "ARM64 NEON+FP16"
 	case ARM64.NEON:
 		return "ARM64 NEON"
 	default:
