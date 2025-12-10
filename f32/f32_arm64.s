@@ -1554,13 +1554,15 @@ mulcplx_neon_scalar_loop:
     FMOVS (R6), F2                 // F2 = bRe
     FMOVS (R7), F3                 // F3 = bIm
 
-    // dstRe = aRe*bRe - aIm*bIm
+    // dstRe = aRe*bRe - aIm*bIm (avoid FMA for clarity)
     FMULS F0, F2, F4               // F4 = aRe * bRe
-    FMSUBS F1, F3, F4, F4          // F4 = F4 - aIm*bIm
+    FMULS F1, F3, F5               // F5 = aIm * bIm
+    FSUBS F4, F5, F4               // F4 = F4 - F5 = aRe*bRe - aIm*bIm
 
-    // dstIm = aRe*bIm + aIm*bRe
+    // dstIm = aRe*bIm + aIm*bRe (avoid FMA for clarity)
     FMULS F0, F3, F5               // F5 = aRe * bIm
-    FMADDS F1, F2, F5, F5          // F5 = F5 + aIm*bRe
+    FMULS F1, F2, F6               // F6 = aIm * bRe
+    FADDS F5, F6, F5               // F5 = F5 + F6 = aRe*bIm + aIm*bRe
 
     // Store results
     FMOVS F4, (R0)
@@ -1632,13 +1634,15 @@ mulconjcplx_neon_scalar_loop:
     FMOVS (R6), F2                 // F2 = bRe
     FMOVS (R7), F3                 // F3 = bIm
 
-    // dstRe = aRe*bRe + aIm*bIm
+    // dstRe = aRe*bRe + aIm*bIm (avoid FMA for clarity)
     FMULS F0, F2, F4               // F4 = aRe * bRe
-    FMADDS F1, F3, F4, F4          // F4 = F4 + aIm*bIm
+    FMULS F1, F3, F5               // F5 = aIm * bIm
+    FADDS F4, F5, F4               // F4 = aRe*bRe + aIm*bIm
 
-    // dstIm = aIm*bRe - aRe*bIm
+    // dstIm = aIm*bRe - aRe*bIm (avoid FMA for clarity)
     FMULS F1, F2, F5               // F5 = aIm * bRe
-    FMSUBS F0, F3, F5, F5          // F5 = F5 - aRe*bIm
+    FMULS F0, F3, F6               // F6 = aRe * bIm
+    FSUBS F5, F6, F5               // F5 = aIm*bRe - aRe*bIm
 
     FMOVS F4, (R0)
     FMOVS F5, (R1)
@@ -1694,9 +1698,10 @@ abssqcplx_neon_scalar_loop:
     FMOVS (R4), F0                 // F0 = aRe
     FMOVS (R5), F1                 // F1 = aIm
 
-    // dst = aRe^2 + aIm^2
+    // dst = aRe^2 + aIm^2 (avoid FMA for clarity)
     FMULS F0, F0, F2               // F2 = aRe^2
-    FMADDS F1, F1, F2, F2          // F2 = F2 + aIm^2
+    FMULS F1, F1, F3               // F3 = aIm^2
+    FADDS F2, F3, F2               // F2 = aRe^2 + aIm^2
 
     FMOVS F2, (R0)
 
