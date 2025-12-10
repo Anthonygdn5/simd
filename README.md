@@ -141,6 +141,7 @@ Same API as `f64` but for `float32` with wider SIMD:
 | **Complex**| `MulComplex(dstRe,dstIm,aRe,aIm,bRe,bIm)` | Split-format complex multiply  | 8x (AVX) / 4x (NEON) |
 |            | `MulConjComplex(dstRe,dstIm,aRe,aIm,bRe,bIm)` | Multiply by conjugate      | 8x / 4x          |
 |            | `AbsSqComplex(dst,aRe,aIm)`           | Magnitude squared                  | 8x / 4x          |
+|            | `ButterflyComplex(uRe,uIm,lRe,lIm,twRe,twIm)` | FFT butterfly with twiddle | 8x / 4x          |
 
 ### `f16` - float16 (Half-Precision) Operations
 
