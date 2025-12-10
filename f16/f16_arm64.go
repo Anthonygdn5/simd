@@ -4,6 +4,9 @@ package f16
 
 import "github.com/tphakala/simd/cpu"
 
+// neonWidth is the number of FP16 elements per NEON vector (128-bit / 16-bit = 8).
+const neonWidth = 8
+
 var (
 	hasFP16 = cpu.ARM64.FP16
 	hasNEON = cpu.ARM64.NEON
@@ -19,12 +22,12 @@ func fromFloat32(f float32) Float16 {
 
 func toFloat32Slice(dst []float32, src []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		// Process vectorized portion (multiples of 8)
-		n8 := (n / 8) * 8
-		toFloat32SliceNEON(dst[:n8], src[:n8])
+	if hasFP16 && n >= neonWidth {
+		// Process vectorized portion (multiples of neonWidth)
+		nVec := (n / neonWidth) * neonWidth
+		toFloat32SliceNEON(dst[:nVec], src[:nVec])
 		// Handle remainder with Go
-		toFloat32SliceGo(dst[n8:], src[n8:])
+		toFloat32SliceGo(dst[nVec:], src[nVec:])
 		return
 	}
 	toFloat32SliceGo(dst, src)
@@ -32,12 +35,12 @@ func toFloat32Slice(dst []float32, src []Float16) {
 
 func fromFloat32Slice(dst []Float16, src []float32) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		// Process vectorized portion (multiples of 8)
-		n8 := (n / 8) * 8
-		fromFloat32SliceNEON(dst[:n8], src[:n8])
+	if hasFP16 && n >= neonWidth {
+		// Process vectorized portion (multiples of neonWidth)
+		nVec := (n / neonWidth) * neonWidth
+		fromFloat32SliceNEON(dst[:nVec], src[:nVec])
 		// Handle remainder with Go
-		fromFloat32SliceGo(dst[n8:], src[n8:])
+		fromFloat32SliceGo(dst[nVec:], src[nVec:])
 		return
 	}
 	fromFloat32SliceGo(dst, src)
@@ -45,12 +48,12 @@ func fromFloat32Slice(dst []Float16, src []float32) {
 
 func dotProduct(a, b []Float16) float32 {
 	n := min(len(a), len(b))
-	if hasFP16 && n >= 8 {
+	if hasFP16 && n >= neonWidth {
 		// Process vectorized portion
-		n8 := (n / 8) * 8
-		result := dotProductNEON(a[:n8], b[:n8])
+		nVec := (n / neonWidth) * neonWidth
+		result := dotProductNEON(a[:nVec], b[:nVec])
 		// Handle remainder with Go
-		result += dotProductGo(a[n8:n], b[n8:n])
+		result += dotProductGo(a[nVec:n], b[nVec:n])
 		return result
 	}
 	return dotProductGo(a, b)
@@ -58,10 +61,10 @@ func dotProduct(a, b []Float16) float32 {
 
 func add(dst, a, b []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		addNEON(dst[:n8], a[:n8], b[:n8])
-		addGo(dst[n8:], a[n8:], b[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		addNEON(dst[:nVec], a[:nVec], b[:nVec])
+		addGo(dst[nVec:], a[nVec:], b[nVec:])
 		return
 	}
 	addGo(dst, a, b)
@@ -69,10 +72,10 @@ func add(dst, a, b []Float16) {
 
 func sub(dst, a, b []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		subNEON(dst[:n8], a[:n8], b[:n8])
-		subGo(dst[n8:], a[n8:], b[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		subNEON(dst[:nVec], a[:nVec], b[:nVec])
+		subGo(dst[nVec:], a[nVec:], b[nVec:])
 		return
 	}
 	subGo(dst, a, b)
@@ -80,10 +83,10 @@ func sub(dst, a, b []Float16) {
 
 func mul(dst, a, b []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		mulNEON(dst[:n8], a[:n8], b[:n8])
-		mulGo(dst[n8:], a[n8:], b[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		mulNEON(dst[:nVec], a[:nVec], b[:nVec])
+		mulGo(dst[nVec:], a[nVec:], b[nVec:])
 		return
 	}
 	mulGo(dst, a, b)
@@ -91,10 +94,10 @@ func mul(dst, a, b []Float16) {
 
 func scale(dst, a []Float16, s Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		scaleNEON(dst[:n8], a[:n8], s)
-		scaleGo(dst[n8:], a[n8:], s)
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		scaleNEON(dst[:nVec], a[:nVec], s)
+		scaleGo(dst[nVec:], a[nVec:], s)
 		return
 	}
 	scaleGo(dst, a, s)
@@ -102,10 +105,10 @@ func scale(dst, a []Float16, s Float16) {
 
 func fma16(dst, a, b, c []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		fmaNEON(dst[:n8], a[:n8], b[:n8], c[:n8])
-		fmaGo(dst[n8:], a[n8:], b[n8:], c[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		fmaNEON(dst[:nVec], a[:nVec], b[:nVec], c[:nVec])
+		fmaGo(dst[nVec:], a[nVec:], b[nVec:], c[nVec:])
 		return
 	}
 	fmaGo(dst, a, b, c)
@@ -113,10 +116,10 @@ func fma16(dst, a, b, c []Float16) {
 
 func sum(a []Float16) float32 {
 	n := len(a)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		result := sumNEON(a[:n8])
-		result += sumGo(a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		result := sumNEON(a[:nVec])
+		result += sumGo(a[nVec:])
 		return result
 	}
 	return sumGo(a)
@@ -124,10 +127,10 @@ func sum(a []Float16) float32 {
 
 func abs16(dst, a []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		absNEON(dst[:n8], a[:n8])
-		absGo(dst[n8:], a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		absNEON(dst[:nVec], a[:nVec])
+		absGo(dst[nVec:], a[nVec:])
 		return
 	}
 	absGo(dst, a)
@@ -135,10 +138,10 @@ func abs16(dst, a []Float16) {
 
 func neg16(dst, a []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		negNEON(dst[:n8], a[:n8])
-		negGo(dst[n8:], a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		negNEON(dst[:nVec], a[:nVec])
+		negGo(dst[nVec:], a[nVec:])
 		return
 	}
 	negGo(dst, a)
@@ -146,10 +149,10 @@ func neg16(dst, a []Float16) {
 
 func relu16(dst, src []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		reluNEON(dst[:n8], src[:n8])
-		reluGo(dst[n8:], src[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		reluNEON(dst[:nVec], src[:nVec])
+		reluGo(dst[nVec:], src[nVec:])
 		return
 	}
 	reluGo(dst, src)
@@ -162,11 +165,11 @@ func sigmoid16(dst, src []Float16) {
 
 func min16(a []Float16) Float16 {
 	n := len(a)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		minVec := minNEON(a[:n8])
-		if n8 < n {
-			minRem := minGo(a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		minVec := minNEON(a[:nVec])
+		if nVec < n {
+			minRem := minGo(a[nVec:])
 			if toFloat32Go(minRem) < toFloat32Go(minVec) {
 				return minRem
 			}
@@ -178,11 +181,11 @@ func min16(a []Float16) Float16 {
 
 func max16(a []Float16) Float16 {
 	n := len(a)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		maxVec := maxNEON(a[:n8])
-		if n8 < n {
-			maxRem := maxGo(a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		maxVec := maxNEON(a[:nVec])
+		if nVec < n {
+			maxRem := maxGo(a[nVec:])
 			if toFloat32Go(maxRem) > toFloat32Go(maxVec) {
 				return maxRem
 			}
@@ -194,10 +197,10 @@ func max16(a []Float16) Float16 {
 
 func div16(dst, a, b []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		divNEON(dst[:n8], a[:n8], b[:n8])
-		divGo(dst[n8:], a[n8:], b[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		divNEON(dst[:nVec], a[:nVec], b[:nVec])
+		divGo(dst[nVec:], a[nVec:], b[nVec:])
 		return
 	}
 	divGo(dst, a, b)
@@ -205,10 +208,10 @@ func div16(dst, a, b []Float16) {
 
 func addScalar16(dst, a []Float16, s Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		addScalarNEON(dst[:n8], a[:n8], s)
-		addScalarGo(dst[n8:], a[n8:], s)
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		addScalarNEON(dst[:nVec], a[:nVec], s)
+		addScalarGo(dst[nVec:], a[nVec:], s)
 		return
 	}
 	addScalarGo(dst, a, s)
@@ -216,10 +219,10 @@ func addScalar16(dst, a []Float16, s Float16) {
 
 func clamp16(dst, a []Float16, minVal, maxVal Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		clampNEON(dst[:n8], a[:n8], minVal, maxVal)
-		clampGo(dst[n8:], a[n8:], minVal, maxVal)
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		clampNEON(dst[:nVec], a[:nVec], minVal, maxVal)
+		clampGo(dst[nVec:], a[nVec:], minVal, maxVal)
 		return
 	}
 	clampGo(dst, a, minVal, maxVal)
@@ -227,10 +230,10 @@ func clamp16(dst, a []Float16, minVal, maxVal Float16) {
 
 func sqrt16(dst, a []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		sqrtNEON(dst[:n8], a[:n8])
-		sqrtGo(dst[n8:], a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		sqrtNEON(dst[:nVec], a[:nVec])
+		sqrtGo(dst[nVec:], a[nVec:])
 		return
 	}
 	sqrtGo(dst, a)
@@ -238,10 +241,10 @@ func sqrt16(dst, a []Float16) {
 
 func reciprocal16(dst, a []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		reciprocalNEON(dst[:n8], a[:n8])
-		reciprocalGo(dst[n8:], a[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		reciprocalNEON(dst[:nVec], a[:nVec])
+		reciprocalGo(dst[nVec:], a[nVec:])
 		return
 	}
 	reciprocalGo(dst, a)
@@ -269,10 +272,10 @@ func maxIdx16(a []Float16) int {
 
 func addScaled16(dst []Float16, alpha Float16, s []Float16) {
 	n := len(dst)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		addScaledNEON(dst[:n8], alpha, s[:n8])
-		addScaledGo(dst[n8:], alpha, s[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		addScaledNEON(dst[:nVec], alpha, s[:nVec])
+		addScaledGo(dst[nVec:], alpha, s[nVec:])
 		return
 	}
 	addScaledGo(dst, alpha, s)
@@ -301,16 +304,16 @@ func dotProductBatch16(results []float32, rows [][]Float16, vec []Float16) {
 
 func accumulateAdd16(dst, src []Float16) {
 	n := len(src)
-	if hasFP16 && n >= 8 {
-		n8 := (n / 8) * 8
-		accumulateAddNEON(dst[:n8], src[:n8])
-		accumulateAddGo(dst[n8:], src[n8:])
+	if hasFP16 && n >= neonWidth {
+		nVec := (n / neonWidth) * neonWidth
+		accumulateAddNEON(dst[:nVec], src[:nVec])
+		accumulateAddGo(dst[nVec:], src[nVec:])
 		return
 	}
 	accumulateAddGo(dst, src)
 }
 
-func convolveValid16(dst []Float16, signal, kernel []Float16) {
+func convolveValid16(dst, signal, kernel []Float16) {
 	convolveValidGo(dst, signal, kernel)
 }
 

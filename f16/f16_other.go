@@ -130,7 +130,7 @@ func accumulateAdd16(dst, src []Float16) {
 	accumulateAddGo(dst, src)
 }
 
-func convolveValid16(dst []Float16, signal, kernel []Float16) {
+func convolveValid16(dst, signal, kernel []Float16) {
 	convolveValidGo(dst, signal, kernel)
 }
 

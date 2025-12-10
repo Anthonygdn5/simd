@@ -97,6 +97,7 @@ func BenchmarkDotProduct(b *testing.B) {
 // Element-wise Binary Operations
 // =============================================================================
 
+//nolint:dupl // Benchmark structure is intentionally similar across operations
 func BenchmarkAdd(b *testing.B) {
 	for _, size := range benchSizes {
 		a16, b16, _, dst16 := makeBenchDataF16(size)
@@ -123,6 +124,7 @@ func BenchmarkAdd(b *testing.B) {
 	}
 }
 
+//nolint:dupl // Benchmark structure is intentionally similar across operations
 func BenchmarkMul(b *testing.B) {
 	for _, size := range benchSizes {
 		a16, b16, _, dst16 := makeBenchDataF16(size)
@@ -185,6 +187,7 @@ func BenchmarkScale(b *testing.B) {
 // Reduction Operations
 // =============================================================================
 
+//nolint:dupl // Benchmark structure is intentionally similar across operations
 func BenchmarkSum(b *testing.B) {
 	for _, size := range benchSizes {
 		a16, _, _, _ := makeBenchDataF16(size)
@@ -211,6 +214,7 @@ func BenchmarkSum(b *testing.B) {
 	}
 }
 
+//nolint:dupl // Benchmark structure is intentionally similar across operations
 func BenchmarkMin(b *testing.B) {
 	for _, size := range benchSizes {
 		a16, _, _, _ := makeBenchDataF16(size)
@@ -237,6 +241,7 @@ func BenchmarkMin(b *testing.B) {
 	}
 }
 
+//nolint:dupl // Benchmark structure is intentionally similar across operations
 func BenchmarkMax(b *testing.B) {
 	for _, size := range benchSizes {
 		a16, _, _, _ := makeBenchDataF16(size)

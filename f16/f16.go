@@ -21,6 +21,13 @@ package f16
 
 import "math"
 
+const (
+	// normEpsilon is the threshold below which a vector magnitude is considered zero.
+	normEpsilon = 1e-7
+	// interleaveChannels is the number of channels for interleave/deinterleave operations.
+	interleaveChannels = 2
+)
+
 // Float16 is a 16-bit IEEE 754 half-precision floating-point number.
 // Stored as uint16, use ToFloat32/FromFloat32 for conversion.
 type Float16 = uint16
@@ -301,7 +308,7 @@ func Normalize(dst, a []Float16) {
 	mag := float32(math.Sqrt(float64(DotProduct(a[:n], a[:n]))))
 
 	// Avoid division by zero
-	if mag < 1e-7 {
+	if mag < normEpsilon {
 		copy(dst[:n], a[:n])
 		return
 	}
@@ -375,7 +382,7 @@ func AccumulateAdd(dst, src []Float16, offset int) {
 
 // ConvolveValid computes valid convolution of signal with kernel.
 // dst[i] = sum(signal[i+j] * kernel[j]) for j in 0..len(kernel)-1.
-func ConvolveValid(dst []Float16, signal, kernel []Float16) {
+func ConvolveValid(dst, signal, kernel []Float16) {
 	if len(kernel) == 0 || len(signal) < len(kernel) {
 		return
 	}
@@ -389,20 +396,20 @@ func ConvolveValid(dst []Float16, signal, kernel []Float16) {
 
 // Interleave2 interleaves two slices: dst[0]=a[0], dst[1]=b[0], dst[2]=a[1], ...
 func Interleave2(dst, a, b []Float16) {
-	n := min(len(dst)/2, min(len(a), len(b)))
+	n := min(len(dst)/interleaveChannels, min(len(a), len(b)))
 	if n == 0 {
 		return
 	}
-	interleave2_16(dst[:n*2], a[:n], b[:n])
+	interleave2_16(dst[:n*interleaveChannels], a[:n], b[:n])
 }
 
 // Deinterleave2 deinterleaves a slice: a[0]=src[0], b[0]=src[1], a[1]=src[2], ...
 func Deinterleave2(a, b, src []Float16) {
-	n := min(len(src)/2, min(len(a), len(b)))
+	n := min(len(src)/interleaveChannels, min(len(a), len(b)))
 	if n == 0 {
 		return
 	}
-	deinterleave2_16(a[:n], b[:n], src[:n*2])
+	deinterleave2_16(a[:n], b[:n], src[:n*interleaveChannels])
 }
 
 // ClampScale performs fused clamp and scale: dst[i] = (clamp(src[i], min, max) - min) * scale.

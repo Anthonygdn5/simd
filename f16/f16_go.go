@@ -2,16 +2,48 @@ package f16
 
 import "math"
 
-// IEEE 754 half-precision format:
-// Sign: 1 bit (bit 15)
-// Exponent: 5 bits (bits 14-10), bias = 15
-// Mantissa: 10 bits (bits 9-0), implicit leading 1 for normalized numbers
+// IEEE 754 half-precision format constants.
+const (
+	// FP16 bit layout
+	fp16SignShift     = 15
+	fp16ExpShift      = 10
+	fp16ExpMask       = 0x1F
+	fp16MantMask      = 0x3FF
+	fp16MantHighBit   = 0x400
+	fp16ExpMax        = 31
+	fp16ExpBias       = 15
+	fp16Infinity      = 0x7C00
+	fp16SignMask      = 0x8000
+	fp16AbsMask       = 0x7FFF
+	fp16NormExpMax    = 30
+
+	// FP32 bit layout
+	fp32SignShift     = 31
+	fp32ExpShift      = 23
+	fp32ExpMask       = 0xFF
+	fp32MantMask      = 0x7FFFFF
+	fp32Infinity      = 0x7F800000
+	fp32ExpBias       = 127
+	fp32SignMask      = 0x8000
+	fp32MantHighBit   = 0x800000
+
+	// Conversion constants
+	fp32MantShift     = 13                             // FP32 mantissa bits to shift for FP16
+	fp32SignExtract   = 16                             // Shift to extract sign from FP32 to FP16 position
+	fp32RoundBit      = 0x1000                         // Bit 12 for rounding
+	fp32RoundMask     = 0xFFF                          // Bits below round bit
+	fp32RoundCheck    = 0x2000                         // Bit 13 for round-to-even check
+	expBiasDiff       = fp32ExpBias - fp16ExpBias      // 112
+	expOverflow       = fp32ExpBias + fp16ExpBias      // 142 - overflow threshold
+	expUnderflow      = fp32ExpBias - 24               // 103 - underflow threshold
+	expDenormThresh   = fp32ExpBias - fp16ExpBias + 1  // 113 - denormalized threshold
+)
 
 // toFloat32Go converts Float16 to float32 using pure Go.
 func toFloat32Go(h Float16) float32 {
-	sign := uint32(h>>15) & 1
-	exp := uint32(h>>10) & 0x1F
-	mant := uint32(h) & 0x3FF
+	sign := uint32(h>>fp16SignShift) & 1
+	exp := uint32(h>>fp16ExpShift) & fp16ExpMask
+	mant := uint32(h) & fp16MantMask
 
 	var f32bits uint32
 
@@ -19,31 +51,31 @@ func toFloat32Go(h Float16) float32 {
 	case 0:
 		if mant == 0 {
 			// Zero (positive or negative)
-			f32bits = sign << 31
+			f32bits = sign << fp32SignShift
 		} else {
 			// Denormalized number - convert to normalized float32
 			// Shift mantissa left until we get a leading 1
 			exp = 1
-			for mant&0x400 == 0 {
+			for mant&fp16MantHighBit == 0 {
 				mant <<= 1
 				exp--
 			}
-			mant &= 0x3FF                   // Remove the leading 1
-			f32bits = (sign << 31) | ((127 - 15 + exp) << 23) | (mant << 13)
+			mant &= fp16MantMask // Remove the leading 1
+			f32bits = (sign << fp32SignShift) | ((fp32ExpBias - fp16ExpBias + exp) << fp32ExpShift) | (mant << fp32MantShift)
 		}
-	case 31:
+	case fp16ExpMax:
 		// Infinity or NaN
 		if mant == 0 {
 			// Infinity
-			f32bits = (sign << 31) | 0x7F800000
+			f32bits = (sign << fp32SignShift) | fp32Infinity
 		} else {
 			// NaN - preserve payload
-			f32bits = (sign << 31) | 0x7F800000 | (mant << 13)
+			f32bits = (sign << fp32SignShift) | fp32Infinity | (mant << fp32MantShift)
 		}
 	default:
 		// Normalized number
 		// Convert exponent: subtract FP16 bias (15), add FP32 bias (127)
-		f32bits = (sign << 31) | ((exp + 127 - 15) << 23) | (mant << 13)
+		f32bits = (sign << fp32SignShift) | ((exp + expBiasDiff) << fp32ExpShift) | (mant << fp32MantShift)
 	}
 
 	return math.Float32frombits(f32bits)
@@ -52,34 +84,34 @@ func toFloat32Go(h Float16) float32 {
 // fromFloat32Go converts float32 to Float16 using pure Go.
 func fromFloat32Go(f float32) Float16 {
 	f32bits := math.Float32bits(f)
-	sign := uint16((f32bits >> 16) & 0x8000)
-	exp := int((f32bits >> 23) & 0xFF)
-	mant := f32bits & 0x7FFFFF
+	sign := uint16((f32bits >> fp32SignExtract) & fp16SignMask)
+	exp := int((f32bits >> fp32ExpShift) & fp32ExpMask)
+	mant := f32bits & fp32MantMask
 
 	switch {
-	case exp == 255:
+	case exp == int(fp32ExpMask):
 		// Infinity or NaN
 		if mant == 0 {
 			// Infinity
-			return sign | 0x7C00
+			return sign | fp16Infinity
 		}
 		// NaN - preserve some payload bits
-		return sign | 0x7C00 | uint16(mant>>13)
+		return sign | fp16Infinity | uint16(mant>>fp32MantShift)
 
-	case exp > 142:
+	case exp > expOverflow:
 		// Overflow to infinity (exp > 127 + 15)
-		return sign | 0x7C00
+		return sign | fp16Infinity
 
-	case exp < 103:
+	case exp < expUnderflow:
 		// Underflow to zero (exp < 127 - 24, too small even for denorms)
 		return sign
 
-	case exp < 113:
+	case exp < expDenormThresh:
 		// Denormalized result
 		// Add implicit 1 to mantissa
-		mant |= 0x800000
+		mant |= fp32MantHighBit
 		// Shift right to create denormalized value
-		shift := uint(113 - exp)
+		shift := uint(expDenormThresh - exp)
 		// Round to nearest even
 		round := uint32(1) << (shift - 1)
 		if mant&round != 0 && (mant&(round-1) != 0 || mant&(round<<1) != 0) {
@@ -91,22 +123,22 @@ func fromFloat32Go(f float32) Float16 {
 	default:
 		// Normalized result
 		// Round to nearest even
-		round := uint32(0x1000) // bit 12
-		if mant&round != 0 && (mant&0xFFF != 0 || mant&0x2000 != 0) {
+		round := uint32(fp32RoundBit)
+		if mant&round != 0 && (mant&fp32RoundMask != 0 || mant&fp32RoundCheck != 0) {
 			mant += round
-			if mant >= 0x800000 {
+			if mant >= fp32MantHighBit {
 				// Mantissa overflow, increment exponent
 				mant = 0
 				exp++
 			}
 		}
-		mant >>= 13
-		exp -= 127 - 15
-		if exp > 30 {
+		mant >>= fp32MantShift
+		exp -= expBiasDiff
+		if exp > fp16NormExpMax {
 			// Overflow to infinity
-			return sign | 0x7C00
+			return sign | fp16Infinity
 		}
-		return sign | uint16(exp<<10) | uint16(mant)
+		return sign | uint16(exp<<fp16ExpShift) | uint16(mant)
 	}
 }
 
@@ -128,7 +160,7 @@ func fromFloat32SliceGo(dst []Float16, src []float32) {
 func dotProductGo(a, b []Float16) float32 {
 	n := min(len(a), len(b))
 	var sum float32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		sum += toFloat32Go(a[i]) * toFloat32Go(b[i])
 	}
 	return sum
@@ -183,7 +215,7 @@ func sumGo(a []Float16) float32 {
 func absGo(dst, a []Float16) {
 	for i := range dst {
 		// Clear sign bit
-		dst[i] = a[i] & 0x7FFF
+		dst[i] = a[i] & fp16AbsMask
 	}
 }
 
@@ -191,7 +223,7 @@ func absGo(dst, a []Float16) {
 func negGo(dst, a []Float16) {
 	for i := range dst {
 		// Flip sign bit
-		dst[i] = a[i] ^ 0x8000
+		dst[i] = a[i] ^ fp16SignMask
 	}
 }
 
@@ -381,11 +413,11 @@ func accumulateAddGo(dst, src []Float16) {
 }
 
 // convolveValidGo computes valid convolution.
-func convolveValidGo(dst []Float16, signal, kernel []Float16) {
+func convolveValidGo(dst, signal, kernel []Float16) {
 	kLen := len(kernel)
 	for i := range dst {
 		var sum float32
-		for j := 0; j < kLen; j++ {
+		for j := range kLen {
 			sum += toFloat32Go(signal[i+j]) * toFloat32Go(kernel[j])
 		}
 		dst[i] = fromFloat32Go(sum)

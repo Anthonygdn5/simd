@@ -44,7 +44,12 @@ func TestToFloat32(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ToFloat32(tt.h)
 			if math.IsInf(float64(tt.want), 0) {
-				if !math.IsInf(float64(got), int(tt.want)) {
+				// Determine expected sign: +1 for positive infinity, -1 for negative
+				sign := 1
+				if tt.want < 0 {
+					sign = -1
+				}
+				if !math.IsInf(float64(got), sign) {
 					t.Errorf("ToFloat32(0x%04X) = %v, want %v", tt.h, got, tt.want)
 				}
 			} else if !almostEqual32(got, tt.want, 1e-6) {
@@ -488,7 +493,7 @@ func TestSigmoid(t *testing.T) {
 // Edge Case Tests
 // =============================================================================
 
-func TestEmptySlices(t *testing.T) {
+func TestEmptySlices(_ *testing.T) {
 	// These should not panic
 	var empty []Float16
 
@@ -1089,7 +1094,7 @@ func TestReLUInPlace(t *testing.T) {
 	}
 }
 
-func TestNewEmptySlices(t *testing.T) {
+func TestNewEmptySlices(_ *testing.T) {
 	// These should not panic
 	var empty []Float16
 
