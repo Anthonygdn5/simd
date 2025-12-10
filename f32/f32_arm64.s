@@ -1867,7 +1867,7 @@ TEXT ·realFFTUnpackNEON(SB), NOSPLIT, $0-152
     // Load 0.5 constant into V30
     MOVW $0x3F000000, R11            // 0.5 in IEEE 754
     FMOVS R11, F30
-    WORD $0x4F809FDE                 // DUP V30.4S, V30.S[0]
+    WORD $0x4E0407DE                 // DUP V30.4S, V30.S[0]
 
 realfft_neon_loop4:
     // Load forward Z[k:k+4]
