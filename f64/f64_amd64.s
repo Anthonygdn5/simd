@@ -3404,8 +3404,8 @@ TEXT ·tanhAVX(SB), NOSPLIT, $0-48
     VMOVUPD tanh64_c5<>(SB), X15       // X15 = 1/120 (c5)
 
     // Process 2 elements per iteration (XMM = 128 bits = 2 x float64)
-    MOVQ CX, AX
-    SHRQ $1, AX                        // len / 2
+    MOVQ CX, R8
+    SHRQ $1, R8                        // len / 2
     JZ   tanh64_remainder
 
 tanh64_loop2:
@@ -3470,7 +3470,7 @@ tanh64_loop2:
     VMOVUPD X0, (DX)                   // store 2 results
     ADDQ $16, SI
     ADDQ $16, DX
-    DECQ AX
+    DECQ R8
     JNZ  tanh64_loop2
 
 tanh64_remainder:
