@@ -1880,9 +1880,9 @@ realfft_neon_loop4:
 
     // Reverse V2 and V3: [0,1,2,3] -> [3,2,1,0]
     // Use REV64 + EXT to reverse 4 elements
-    WORD $0x4E200842                 // REV64 V2.4S, V2.4S  (swap pairs: [1,0,3,2])
+    WORD $0x4EA00842                 // REV64 V2.4S, V2.4S  (swap pairs: [1,0,3,2])
     WORD $0x6E024042                 // EXT V2.16B, V2.16B, V2.16B, #8  (swap halves: [3,2,1,0])
-    WORD $0x4E200863                 // REV64 V3.4S, V3.4S
+    WORD $0x4EA00863                 // REV64 V3.4S, V3.4S
     WORD $0x6E034063                 // EXT V3.16B, V3.16B, V3.16B, #8
 
     // For conjugate: znkIm = -zIm[n-k]
