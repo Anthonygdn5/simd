@@ -252,15 +252,15 @@ func TestTanh(t *testing.T) {
 		// Various sizes to test NEON vectorized path and scalar remainder
 		{"size_1", []float32{2.5}},
 		{"size_3", []float32{-1, 0, 1}},
-		{"size_4", []float32{-2, -1, 1, 2}},     // exact NEON width for f32
-		{"size_5", []float32{-2, -1, 0, 1, 2}},  // NEON + 1 scalar
+		{"size_4", []float32{-2, -1, 1, 2}},    // exact NEON width for f32
+		{"size_5", []float32{-2, -1, 0, 1, 2}}, // NEON + 1 scalar
 		{"size_7", []float32{-3, -2, -1, 0, 1, 2, 3}},
 		{"size_9", []float32{-4, -3, -2, -1, 0, 1, 2, 3, 4}},
 		{"size_17", make([]float32, 17)},
 	}
 
 	// Fill size_17 with values including extremes
-	for i := 0; i < 17; i++ {
+	for i := range 17 {
 		testCases[len(testCases)-1].src[i] = float32(i-8) * 10 // -80 to +80
 	}
 

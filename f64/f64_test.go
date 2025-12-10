@@ -947,9 +947,9 @@ func TestTanh(t *testing.T) {
 		{"extreme_mixed", []float64{-100, -50, -20, -10, 0, 10, 20, 50, 100}},
 		// Various sizes to test NEON vectorized path (2-wide for f64) and scalar remainder
 		{"size_1", []float64{2.5}},
-		{"size_2", []float64{-1, 1}},          // exact NEON width for f64
-		{"size_3", []float64{-1, 0, 1}},       // NEON + 1 scalar
-		{"size_4", []float64{-2, -1, 1, 2}},   // 2x NEON
+		{"size_2", []float64{-1, 1}},        // exact NEON width for f64
+		{"size_3", []float64{-1, 0, 1}},     // NEON + 1 scalar
+		{"size_4", []float64{-2, -1, 1, 2}}, // 2x NEON
 		{"size_5", []float64{-2, -1, 0, 1, 2}},
 		{"size_7", []float64{-3, -2, -1, 0, 1, 2, 3}},
 		{"size_9", []float64{-4, -3, -2, -1, 0, 1, 2, 3, 4}},
@@ -957,7 +957,7 @@ func TestTanh(t *testing.T) {
 	}
 
 	// Fill size_17 with values including extremes
-	for i := 0; i < 17; i++ {
+	for i := range 17 {
 		testCases[len(testCases)-1].src[i] = float64(i-8) * 10 // -80 to +80
 	}
 
