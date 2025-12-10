@@ -590,6 +590,16 @@ func butterflyComplex32(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32
 	butterflyComplex32Go(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm)
 }
 
+func realFFTUnpack32(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int) {
+	// Use AVX+FMA if available and have enough elements
+	// Need at least 9 elements: process k=1..n-1 where n>=9 gives 8+ iterations
+	if cpu.X86.AVX && cpu.X86.FMA && n > minAVXElements {
+		realFFTUnpackAVX(outRe, outIm, zRe, zIm, twRe, twIm, n)
+		return
+	}
+	realFFTUnpack32Go(outRe, outIm, zRe, zIm, twRe, twIm, n)
+}
+
 // Split-format complex assembly function declarations
 //
 //go:noescape
@@ -603,3 +613,6 @@ func absSqComplexAVX(dst, aRe, aIm []float32)
 
 //go:noescape
 func butterflyComplexAVX(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32)
+
+//go:noescape
+func realFFTUnpackAVX(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)

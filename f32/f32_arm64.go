@@ -389,6 +389,16 @@ func butterflyComplex32(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32
 	butterflyComplex32Go(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm)
 }
 
+func realFFTUnpack32(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int) {
+	// Use NEON if available and have enough elements
+	// Need at least 5 elements: process k=1..n-1 where n>=5 gives 4+ iterations
+	if hasNEON && n > 4 {
+		realFFTUnpackNEON(outRe, outIm, zRe, zIm, twRe, twIm, n)
+		return
+	}
+	realFFTUnpack32Go(outRe, outIm, zRe, zIm, twRe, twIm, n)
+}
+
 //go:noescape
 func mulComplexNEON(dstRe, dstIm, aRe, aIm, bRe, bIm []float32)
 
@@ -400,3 +410,6 @@ func absSqComplexNEON(dst, aRe, aIm []float32)
 
 //go:noescape
 func butterflyComplexNEON(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32)
+
+//go:noescape
+func realFFTUnpackNEON(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)

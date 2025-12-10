@@ -3713,3 +3713,271 @@ butterfly_scalar:
 butterfly_done:
     VZEROUPPER
     RET
+
+// ============================================================================
+// REAL FFT UNPACK - UNPACKING STEP FOR REAL-VALUED FFT
+// ============================================================================
+
+// func realFFTUnpackAVX(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)
+// Performs the unpacking step of real FFT:
+//   For k in [1, n-1]:
+//     conj_z = conj(Z[n-k])
+//     even = 0.5 * (Z[k] + conj_z)
+//     diff = Z[k] - conj_z
+//     odd = W[k] * (-0.5i) * diff
+//     X[k] = even + odd
+// Frame: 6 slices × 24 bytes + 1 int × 8 bytes = 152 bytes
+TEXT ·realFFTUnpackAVX(SB), NOSPLIT, $0-152
+    // Load parameters
+    MOVQ outRe_base+0(FP), DX        // DX = outRe pointer
+    MOVQ outIm_base+24(FP), SI       // SI = outIm pointer
+    MOVQ zRe_base+48(FP), DI         // DI = zRe pointer (forward)
+    MOVQ zIm_base+72(FP), R8         // R8 = zIm pointer (forward)
+    MOVQ twRe_base+96(FP), R11       // R11 = twRe pointer
+    MOVQ twIm_base+120(FP), R12      // R12 = twIm pointer
+    MOVQ n+144(FP), CX               // CX = n
+
+    // Calculate number of iterations: (n-1) / 8
+    MOVQ CX, AX
+    DECQ AX                          // AX = n - 1
+    MOVQ AX, R13                     // R13 = n - 1 (save for remainder)
+    SHRQ $3, AX                      // AX = (n-1) / 8 = number of SIMD iterations
+    JZ   realfft_remainder           // Skip SIMD loop if < 8 elements
+
+    // Set up reverse pointers: zRe[n-8], zIm[n-8]
+    MOVQ CX, R9
+    SUBQ $8, R9                      // R9 = n - 8
+    SHLQ $2, R9                      // R9 = (n-8) * 4 bytes
+    MOVQ DI, R9                      // R9 = zRe base
+    ADDQ CX, R9
+    SUBQ $8, R9
+    SHLQ $2, R9                      // Wrong, redo this
+
+    // Recalculate: R9 = &zRe[n-8], R10 = &zIm[n-8]
+    MOVQ CX, R14                     // R14 = n
+    SUBQ $8, R14                     // R14 = n - 8
+    SHLQ $2, R14                     // R14 = (n-8) * 4 = byte offset
+    MOVQ DI, R9
+    ADDQ R14, R9                     // R9 = &zRe[n-8]
+    MOVQ R8, R10
+    ADDQ R14, R10                    // R10 = &zIm[n-8]
+
+    // Offset forward pointers to start at index 1
+    ADDQ $4, DI                      // DI = &zRe[1]
+    ADDQ $4, R8                      // R8 = &zIm[1]
+    ADDQ $4, DX                      // DX = &outRe[1]
+    ADDQ $4, SI                      // SI = &outIm[1]
+
+    // Load constants
+    // Reverse permutation mask: [7, 6, 5, 4, 3, 2, 1, 0]
+    MOVQ $0x0001000200030004, R14
+    MOVQ R14, X14
+    MOVQ $0x0005000600070000, R14    // Wrong format, need 32-bit indices
+
+    // Actually, VPERMPS uses 32-bit indices. Let me use a different approach.
+    // Create reverse mask in YMM register
+    VPCMPEQD Y15, Y15, Y15           // Y15 = all 1s (will use for sign flip)
+    VPSRLD $1, Y15, Y15              // Y15 = 0x7FFFFFFF (clear sign bit for abs mask)
+
+    // For reverse permutation, we'll construct it differently
+    // Use VPERMPD for 64-bit permute then shuffle within lanes
+    // Actually, let's load the permutation mask from memory (cleaner)
+
+    // Broadcast 0.5 (0x3F000000 = 0.5f)
+    MOVL $0x3F000000, R14
+    MOVD R14, X13
+    VBROADCASTSS X13, Y13            // Y13 = 0.5 broadcast
+
+    // Sign mask for negation (0x80000000)
+    VPCMPEQD Y14, Y14, Y14           // Y14 = all 1s
+    VPSLLD $31, Y14, Y14             // Y14 = 0x80000000 (sign bit only)
+
+realfft_loop8:
+    // Load forward Z[k:k+8]
+    VMOVUPS (DI), Y0                 // Y0 = zRe[k:k+8] (forward)
+    VMOVUPS (R8), Y1                 // Y1 = zIm[k:k+8] (forward)
+
+    // Load reverse Z[n-k-7:n-k+1] and reverse the order
+    // Memory has: z[n-k-7], z[n-k-6], ..., z[n-k]
+    // We need:    z[n-k], z[n-k-1], ..., z[n-k-7]
+    VMOVUPS (R9), Y2                 // Y2 = zRe[n-k-7:n-k+1] (to be reversed)
+    VMOVUPS (R10), Y3                // Y3 = zIm[n-k-7:n-k+1] (to be reversed)
+
+    // Reverse Y2 and Y3 using VPERM2F128 + VPERMILPS
+    // Step 1: Swap 128-bit lanes
+    VPERM2F128 $0x01, Y2, Y2, Y2     // Swap high/low 128-bit lanes
+    VPERM2F128 $0x01, Y3, Y3, Y3
+    // Step 2: Reverse within each 128-bit lane using VPERMILPS
+    VPERMILPS $0x1B, Y2, Y2          // 0x1B = 0b00011011 = [3,2,1,0] within each lane
+    VPERMILPS $0x1B, Y3, Y3
+
+    // Now Y2 = znkRe (reversed), Y3 = zIm[n-k] (reversed, not yet negated)
+    // For conjugate: znkIm = -zIm[n-k]
+    VXORPS Y14, Y3, Y3               // Y3 = znkIm = -zIm[n-k] (conjugate)
+
+    // Compute even = 0.5 * (Z[k] + conj(Z[n-k]))
+    // evenRe = 0.5 * (zkRe + znkRe)
+    // evenIm = 0.5 * (zkIm + znkIm) = 0.5 * (zkIm - zIm[n-k])
+    VADDPS Y0, Y2, Y4                // Y4 = zkRe + znkRe
+    VMULPS Y4, Y13, Y4               // Y4 = evenRe = 0.5 * (zkRe + znkRe)
+    VADDPS Y1, Y3, Y5                // Y5 = zkIm + znkIm (znkIm already negated)
+    VMULPS Y5, Y13, Y5               // Y5 = evenIm = 0.5 * (zkIm + znkIm)
+
+    // Compute diff = Z[k] - conj(Z[n-k])
+    // diffRe = zkRe - znkRe
+    // diffIm = zkIm - znkIm = zkIm - (-zIm[n-k]) = zkIm + zIm[n-k]
+    VSUBPS Y2, Y0, Y6                // Y6 = diffRe = zkRe - znkRe
+    VSUBPS Y3, Y1, Y7                // Y7 = diffIm = zkIm - znkIm
+
+    // Load twiddles W[k]
+    VMOVUPS (R11), Y8                // Y8 = twRe (wr)
+    VMOVUPS (R12), Y9                // Y9 = twIm (wi)
+
+    // Compute odd = W[k] * (-0.5i) * diff
+    // oddRe = 0.5 * (wr*diffIm + wi*diffRe)
+    // oddIm = 0.5 * (wi*diffIm - wr*diffRe)
+    VMULPS Y8, Y7, Y10               // Y10 = wr * diffIm
+    VFMADD231PS Y9, Y6, Y10          // Y10 = wr*diffIm + wi*diffRe
+    VMULPS Y10, Y13, Y10             // Y10 = oddRe = 0.5 * (wr*diffIm + wi*diffRe)
+
+    VMULPS Y9, Y7, Y11               // Y11 = wi * diffIm
+    VFNMADD231PS Y8, Y6, Y11         // Y11 = wi*diffIm - wr*diffRe
+    VMULPS Y11, Y13, Y11             // Y11 = oddIm = 0.5 * (wi*diffIm - wr*diffRe)
+
+    // Compute output X[k] = even + odd
+    VADDPS Y4, Y10, Y0               // Y0 = outRe = evenRe + oddRe
+    VADDPS Y5, Y11, Y1               // Y1 = outIm = evenIm + oddIm
+
+    // Store results
+    VMOVUPS Y0, (DX)                 // store outRe[k:k+8]
+    VMOVUPS Y1, (SI)                 // store outIm[k:k+8]
+
+    // Advance pointers
+    ADDQ $32, DI                     // forward zRe += 8
+    ADDQ $32, R8                     // forward zIm += 8
+    SUBQ $32, R9                     // reverse zRe -= 8
+    SUBQ $32, R10                    // reverse zIm -= 8
+    ADDQ $32, R11                    // twRe += 8
+    ADDQ $32, R12                    // twIm += 8
+    ADDQ $32, DX                     // outRe += 8
+    ADDQ $32, SI                     // outIm += 8
+
+    DECQ AX
+    JNZ  realfft_loop8
+
+realfft_remainder:
+    // Handle remaining elements (n-1) % 8
+    ANDQ $7, R13                     // R13 = remainder count
+    JZ   realfft_done
+
+    // Reload base pointers for remainder (need to recalculate positions)
+    MOVQ outRe_base+0(FP), DX
+    MOVQ outIm_base+24(FP), SI
+    MOVQ zRe_base+48(FP), DI
+    MOVQ zIm_base+72(FP), R8
+    MOVQ twRe_base+96(FP), R11
+    MOVQ twIm_base+120(FP), R12
+    MOVQ n+144(FP), CX
+
+    // Calculate starting k for remainder: 1 + 8 * num_full_iterations
+    MOVQ CX, AX
+    DECQ AX                          // AX = n - 1
+    SHRQ $3, AX                      // AX = num_full_iterations
+    SHLQ $3, AX                      // AX = 8 * num_full_iterations
+    INCQ AX                          // AX = 1 + 8 * num_full_iterations = starting k
+
+    // Offset pointers to starting k
+    MOVQ AX, R14
+    SHLQ $2, R14                     // R14 = k * 4 bytes
+    ADDQ R14, DX                     // DX = &outRe[k]
+    ADDQ R14, SI                     // SI = &outIm[k]
+    ADDQ R14, DI                     // DI = &zRe[k]
+    ADDQ R14, R8                     // R8 = &zIm[k]
+
+    // Twiddle offset is (k-1)
+    DECQ AX
+    MOVQ AX, R14
+    SHLQ $2, R14
+    ADDQ R14, R11                    // R11 = &twRe[k-1]
+    ADDQ R14, R12                    // R12 = &twIm[k-1]
+    INCQ AX                          // Restore AX = k
+
+realfft_scalar:
+    // Calculate mirror index: nk = n - k
+    MOVQ CX, R14
+    SUBQ AX, R14                     // R14 = n - k = nk
+
+    // Load Z[k]
+    VMOVSS (DI), X0                  // X0 = zRe[k]
+    VMOVSS (R8), X1                  // X1 = zIm[k]
+
+    // Load conj(Z[n-k])
+    MOVQ zRe_base+48(FP), R15
+    MOVQ R14, R9
+    SHLQ $2, R9
+    ADDQ R9, R15
+    VMOVSS (R15), X2                 // X2 = zRe[nk]
+
+    MOVQ zIm_base+72(FP), R15
+    ADDQ R9, R15
+    VMOVSS (R15), X3                 // X3 = zIm[nk]
+
+    // Load 0.5 constant (0x3F000000 = 0.5f)
+    MOVL $0x3F000000, R14
+    MOVD R14, X13
+
+    // Negate X3 for conjugate: znkIm = -zIm[nk]
+    VXORPS X14, X14, X14
+    VSUBSS X3, X14, X3               // X3 = -zIm[nk] = znkIm
+
+    // evenRe = 0.5 * (zkRe + znkRe)
+    VADDSS X0, X2, X4
+    VMULSS X4, X13, X4               // X4 = evenRe
+
+    // evenIm = 0.5 * (zkIm + znkIm)
+    VADDSS X1, X3, X5
+    VMULSS X5, X13, X5               // X5 = evenIm
+
+    // diffRe = zkRe - znkRe
+    VSUBSS X2, X0, X6                // X6 = diffRe
+
+    // diffIm = zkIm - znkIm
+    VSUBSS X3, X1, X7                // X7 = diffIm
+
+    // Load twiddles
+    VMOVSS (R11), X8                 // X8 = wr
+    VMOVSS (R12), X9                 // X9 = wi
+
+    // oddRe = 0.5 * (wr*diffIm + wi*diffRe)
+    VMULSS X8, X7, X10               // X10 = wr * diffIm
+    VFMADD231SS X9, X6, X10          // X10 = wr*diffIm + wi*diffRe
+    VMULSS X10, X13, X10             // X10 = oddRe
+
+    // oddIm = 0.5 * (wi*diffIm - wr*diffRe)
+    VMULSS X9, X7, X11               // X11 = wi * diffIm
+    VFNMADD231SS X8, X6, X11         // X11 = wi*diffIm - wr*diffRe
+    VMULSS X11, X13, X11             // X11 = oddIm
+
+    // output = even + odd
+    VADDSS X4, X10, X0               // X0 = outRe
+    VADDSS X5, X11, X1               // X1 = outIm
+
+    // Store
+    VMOVSS X0, (DX)
+    VMOVSS X1, (SI)
+
+    // Advance pointers
+    ADDQ $4, DI
+    ADDQ $4, R8
+    ADDQ $4, R11
+    ADDQ $4, R12
+    ADDQ $4, DX
+    ADDQ $4, SI
+    INCQ AX                          // k++
+
+    DECQ R13
+    JNZ  realfft_scalar
+
+realfft_done:
+    VZEROUPPER
+    RET
