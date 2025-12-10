@@ -994,6 +994,7 @@ abs_avx_done:
     RET
 
 // func absSSE2(dst []float32, a []complex64)
+// Uses SSE2-only instructions (no HADDPS which is SSE3)
 TEXT ·absSSE2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
@@ -1003,9 +1004,12 @@ TEXT ·absSSE2(SB), NOSPLIT, $0-48
     JZ   abs_sse2_done
 
 abs_sse2_loop:
-    MOVSD (SI), X0           // [r, i, ?, ?]
-    MULPS X0, X0             // [r^2, i^2, ?, ?]
-    HADDPS X0, X0            // [r^2+i^2, r^2+i^2, ...]
+    MOVSD (SI), X0           // X0 = [r, i, 0, 0]
+    MULPS X0, X0             // X0 = [r^2, i^2, 0, 0]
+    // SSE2-compatible horizontal add (no HADDPS)
+    MOVAPS X0, X1            // X1 = [r^2, i^2, 0, 0]
+    SHUFPS $0x01, X1, X1     // X1 = [i^2, r^2, r^2, r^2]
+    ADDSS X1, X0             // X0[0] = r^2 + i^2
     SQRTSS X0, X0
     MOVSS X0, (DX)
 
@@ -1117,6 +1121,7 @@ abssq_avx_done:
     RET
 
 // func absSqSSE2(dst []float32, a []complex64)
+// Uses SSE2-only instructions (no HADDPS which is SSE3)
 TEXT ·absSqSSE2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), DX
     MOVQ dst_len+8(FP), CX
@@ -1126,9 +1131,12 @@ TEXT ·absSqSSE2(SB), NOSPLIT, $0-48
     JZ   abssq_sse2_done
 
 abssq_sse2_loop:
-    MOVSD (SI), X0
-    MULPS X0, X0
-    HADDPS X0, X0
+    MOVSD (SI), X0           // X0 = [r, i, 0, 0]
+    MULPS X0, X0             // X0 = [r^2, i^2, 0, 0]
+    // SSE2-compatible horizontal add (no HADDPS)
+    MOVAPS X0, X1            // X1 = [r^2, i^2, 0, 0]
+    SHUFPS $0x01, X1, X1     // X1 = [i^2, r^2, r^2, r^2]
+    ADDSS X1, X0             // X0[0] = r^2 + i^2
     MOVSS X0, (DX)
 
     ADDQ $8, SI
