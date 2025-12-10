@@ -353,6 +353,9 @@ func EuclideanDistance(a, b []float32) float32 {
 
 const normalizeMagnitudeThreshold32 = 1e-7
 
+// realFFTUnpackMinN is the minimum n required for RealFFTUnpack (need at least 2 bins).
+const realFFTUnpackMinN = 2
+
 // CubicInterpDot computes the fused cubic interpolation dot product:
 //
 //	Σ hist[i] * (a[i] + x*(b[i] + x*(c[i] + x*d[i])))
@@ -654,4 +657,50 @@ func ButterflyComplex(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32) 
 		return
 	}
 	butterflyComplex32(upperRe[:n], upperIm[:n], lowerRe[:n], lowerIm[:n], twRe[:n], twIm[:n])
+}
+
+// RealFFTUnpack performs the unpacking step of a real-valued FFT.
+//
+// Given Z = FFT(packed real data of size 2n), this computes the real FFT output X
+// for bins k = 1 to n-1. The formula for each bin is:
+//
+//	conj_z = conj(Z[n-k])
+//	even = 0.5 * (Z[k] + conj_z)
+//	diff = Z[k] - conj_z
+//	odd  = W[k] * (-0.5i) * diff
+//	X[k] = even + odd
+//
+// Expanding the complex arithmetic:
+//
+//	evenRe = 0.5 * (zRe[k] + zRe[n-k])
+//	evenIm = 0.5 * (zIm[k] - zIm[n-k])
+//	diffRe = zRe[k] - zRe[n-k]
+//	diffIm = zIm[k] + zIm[n-k]
+//	oddRe  = 0.5 * (twRe[k]*diffIm + twIm[k]*diffRe)
+//	oddIm  = 0.5 * (twIm[k]*diffIm - twRe[k]*diffRe)
+//	outRe[k] = evenRe + oddRe
+//	outIm[k] = evenIm + oddIm
+//
+// Parameters:
+//   - outRe, outIm: Output arrays, X[k] written to index k for k in [1, n-1]
+//   - zRe, zIm: Input Z array of length n
+//   - twRe, twIm: Twiddle factors W[k] at index k-1 (length n-1)
+//
+// The DC bin (k=0) and Nyquist bin (k=n) must be handled separately by the caller.
+// Typical real FFT post-processing:
+//
+//	X[0] = Z[0].real + Z[0].imag  (DC component)
+//	X[n] = Z[0].real - Z[0].imag  (Nyquist component)
+//
+// Uses AVX+FMA on AMD64, NEON on ARM64, with pure Go fallback.
+func RealFFTUnpack(outRe, outIm, zRe, zIm, twRe, twIm []float32) {
+	n := len(zRe)
+	if n < realFFTUnpackMinN {
+		return
+	}
+	// Validate slice lengths
+	if len(zIm) < n || len(outRe) < n || len(outIm) < n || len(twRe) < n-1 || len(twIm) < n-1 {
+		return
+	}
+	realFFTUnpack32(outRe, outIm, zRe, zIm, twRe, twIm, n)
 }

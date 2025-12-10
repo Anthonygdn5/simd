@@ -2742,3 +2742,235 @@ func BenchmarkButterflyComplex(b *testing.B) {
 		})
 	}
 }
+
+// =============================================================================
+// REAL FFT UNPACK TESTS
+// =============================================================================
+
+// realFFTUnpackRef is a reference implementation of the real FFT unpack operation.
+func realFFTUnpackRef(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int) {
+	for k := 1; k < n; k++ {
+		nk := n - k
+
+		// Load Z[k] and conj(Z[n-k])
+		zkRe, zkIm := zRe[k], zIm[k]
+		znkRe, znkIm := zRe[nk], -zIm[nk] // Conjugate
+
+		// even = 0.5 * (Z[k] + conj(Z[n-k]))
+		evenRe := 0.5 * (zkRe + znkRe)
+		evenIm := 0.5 * (zkIm + znkIm)
+
+		// diff = Z[k] - conj(Z[n-k])
+		diffRe := zkRe - znkRe
+		diffIm := zkIm - znkIm
+
+		// odd = W[k] * (-0.5i) * diff
+		wr, wi := twRe[k-1], twIm[k-1]
+		oddRe := 0.5 * (wr*diffIm + wi*diffRe)
+		oddIm := 0.5 * (wi*diffIm - wr*diffRe)
+
+		// X[k] = even + odd
+		outRe[k] = evenRe + oddRe
+		outIm[k] = evenIm + oddIm
+	}
+}
+
+func TestRealFFTUnpack(t *testing.T) {
+	sizes := []int{2, 3, 4, 5, 8, 9, 16, 17, 31, 32, 33, 63, 64, 65, 128, 256, 512, 1000}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			// Allocate arrays
+			zRe := make([]float32, n)
+			zIm := make([]float32, n)
+			twRe := make([]float32, n-1)
+			twIm := make([]float32, n-1)
+			outRe := make([]float32, n)
+			outIm := make([]float32, n)
+			outReRef := make([]float32, n)
+			outImRef := make([]float32, n)
+
+			// Initialize with test data
+			for i := range n {
+				zRe[i] = float32(i+1) * 0.1
+				zIm[i] = float32(i+2) * 0.2
+			}
+
+			// Generate twiddle factors
+			for k := 1; k < n; k++ {
+				angle := -2 * math.Pi * float64(k) / float64(2*n)
+				twRe[k-1] = float32(math.Cos(angle))
+				twIm[k-1] = float32(math.Sin(angle))
+			}
+
+			// Apply SIMD version
+			RealFFTUnpack(outRe, outIm, zRe, zIm, twRe, twIm)
+
+			// Apply reference
+			realFFTUnpackRef(outReRef, outImRef, zRe, zIm, twRe, twIm, n)
+
+			// Compare results
+			for k := 1; k < n; k++ {
+				relTol := func(got, want float32) bool {
+					diff := math.Abs(float64(got - want))
+					return diff <= 1e-4 || diff <= math.Abs(float64(want))*1e-5
+				}
+				if !relTol(outRe[k], outReRef[k]) {
+					t.Errorf("outRe[%d] = %v, want %v, diff=%v", k, outRe[k], outReRef[k], outRe[k]-outReRef[k])
+				}
+				if !relTol(outIm[k], outImRef[k]) {
+					t.Errorf("outIm[%d] = %v, want %v, diff=%v", k, outIm[k], outImRef[k], outIm[k]-outImRef[k])
+				}
+			}
+		})
+	}
+}
+
+func TestRealFFTUnpack_EdgeCases(t *testing.T) {
+	// Test with n < 2 (should return without doing anything)
+	t.Run("n=0", func(_ *testing.T) {
+		RealFFTUnpack(nil, nil, nil, nil, nil, nil)
+	})
+
+	t.Run("n=1", func(_ *testing.T) {
+		outRe := []float32{0}
+		outIm := []float32{0}
+		zRe := []float32{1}
+		zIm := []float32{0}
+		// No twiddles needed for n=1
+		RealFFTUnpack(outRe, outIm, zRe, zIm, nil, nil)
+		// Should return without modifying anything since n < 2
+	})
+}
+
+func TestRealFFTUnpack_GoVsSIMD(t *testing.T) {
+	// Test that Go and SIMD implementations produce identical results
+	sizes := []int{9, 16, 17, 32, 64, 128, 256, 512}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			zRe := make([]float32, n)
+			zIm := make([]float32, n)
+			twRe := make([]float32, n-1)
+			twIm := make([]float32, n-1)
+			outReSIMD := make([]float32, n)
+			outImSIMD := make([]float32, n)
+			outReGo := make([]float32, n)
+			outImGo := make([]float32, n)
+
+			// Use random-ish test data
+			for i := range n {
+				zRe[i] = float32(math.Sin(float64(i)*0.7)) * 10
+				zIm[i] = float32(math.Cos(float64(i)*0.9)) * 10
+			}
+
+			for k := 1; k < n; k++ {
+				angle := -2 * math.Pi * float64(k) / float64(2*n)
+				twRe[k-1] = float32(math.Cos(angle))
+				twIm[k-1] = float32(math.Sin(angle))
+			}
+
+			// Run both implementations
+			RealFFTUnpack(outReSIMD, outImSIMD, zRe, zIm, twRe, twIm)
+			realFFTUnpack32Go(outReGo, outImGo, zRe, zIm, twRe, twIm, n)
+
+			// Compare
+			for k := 1; k < n; k++ {
+				reDiff := math.Abs(float64(outReSIMD[k] - outReGo[k]))
+				imDiff := math.Abs(float64(outImSIMD[k] - outImGo[k]))
+
+				// Use relative tolerance for FMA precision differences
+				reRef := math.Abs(float64(outReGo[k]))
+				imRef := math.Abs(float64(outImGo[k]))
+				reTol := max(1e-5, reRef*1e-6)
+				imTol := max(1e-5, imRef*1e-6)
+
+				if reDiff > reTol {
+					t.Errorf("k=%d outRe: SIMD=%v, Go=%v, diff=%v", k, outReSIMD[k], outReGo[k], reDiff)
+				}
+				if imDiff > imTol {
+					t.Errorf("k=%d outIm: SIMD=%v, Go=%v, diff=%v", k, outImSIMD[k], outImGo[k], imDiff)
+				}
+			}
+		})
+	}
+}
+
+func TestRealFFTUnpack_KnownValues(t *testing.T) {
+	// Test with known values for a small case
+	// n=4: process k=1,2,3
+	n := 4
+	zRe := []float32{1, 2, 3, 4}
+	zIm := []float32{0.1, 0.2, 0.3, 0.4}
+
+	// Twiddles for k=1,2,3: W[k] = exp(-i*2*pi*k/(2*4)) = exp(-i*pi*k/4)
+	twRe := []float32{
+		float32(math.Cos(-math.Pi / 4)),     // k=1
+		float32(math.Cos(-math.Pi / 2)),     // k=2
+		float32(math.Cos(-3 * math.Pi / 4)), // k=3
+	}
+	twIm := []float32{
+		float32(math.Sin(-math.Pi / 4)),     // k=1
+		float32(math.Sin(-math.Pi / 2)),     // k=2
+		float32(math.Sin(-3 * math.Pi / 4)), // k=3
+	}
+
+	outRe := make([]float32, n)
+	outIm := make([]float32, n)
+	outReRef := make([]float32, n)
+	outImRef := make([]float32, n)
+
+	RealFFTUnpack(outRe, outIm, zRe, zIm, twRe, twIm)
+	realFFTUnpackRef(outReRef, outImRef, zRe, zIm, twRe, twIm, n)
+
+	for k := 1; k < n; k++ {
+		if math.Abs(float64(outRe[k]-outReRef[k])) > 1e-5 {
+			t.Errorf("k=%d outRe = %v, want %v", k, outRe[k], outReRef[k])
+		}
+		if math.Abs(float64(outIm[k]-outImRef[k])) > 1e-5 {
+			t.Errorf("k=%d outIm = %v, want %v", k, outIm[k], outImRef[k])
+		}
+	}
+}
+
+func BenchmarkRealFFTUnpack(b *testing.B) {
+	sizes := []int{64, 128, 256, 512, 1024, 4096}
+
+	benchFn := func(b *testing.B, n int, fn func(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)) {
+		b.Helper()
+		zRe := make([]float32, n)
+		zIm := make([]float32, n)
+		twRe := make([]float32, n-1)
+		twIm := make([]float32, n-1)
+		outRe := make([]float32, n)
+		outIm := make([]float32, n)
+
+		for i := range n {
+			zRe[i] = float32(i) * 0.1
+			zIm[i] = float32(i) * 0.2
+		}
+		for k := 1; k < n; k++ {
+			angle := -2 * math.Pi * float64(k) / float64(2*n)
+			twRe[k-1] = float32(math.Cos(angle))
+			twIm[k-1] = float32(math.Sin(angle))
+		}
+
+		b.ResetTimer()
+		b.SetBytes(int64(n * 4 * 4)) // 4 slices of float32 (in/out re/im)
+
+		for i := 0; i < b.N; i++ {
+			fn(outRe, outIm, zRe, zIm, twRe, twIm, n)
+		}
+	}
+
+	for _, n := range sizes {
+		b.Run(fmt.Sprintf("SIMD_%d", n), func(b *testing.B) {
+			benchFn(b, n, func(outRe, outIm, zRe, zIm, twRe, twIm []float32, _ int) {
+				RealFFTUnpack(outRe, outIm, zRe, zIm, twRe, twIm)
+			})
+		})
+		b.Run(fmt.Sprintf("Go_%d", n), func(b *testing.B) {
+			benchFn(b, n, realFFTUnpack32Go)
+		})
+	}
+}
