@@ -21,6 +21,7 @@ type Features struct {
 
 	// ARM64 features
 	NEON bool
+	FP16 bool // ARM64 half-precision floating point (FEAT_FP16)
 	SVE  bool
 	SVE2 bool
 }
@@ -42,6 +43,9 @@ func HasFMA() bool { return X86.FMA }
 
 // HasNEON returns true if ARM NEON is available.
 func HasNEON() bool { return ARM64.NEON }
+
+// HasFP16 returns true if ARM FP16 (half-precision) is available.
+func HasFP16() bool { return ARM64.FP16 }
 
 // HasAVX512VL returns true if AVX-512VL is available.
 func HasAVX512VL() bool { return X86.AVX512VL }
