@@ -413,3 +413,25 @@ func butterflyComplexNEON(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float
 
 //go:noescape
 func realFFTUnpackNEON(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)
+
+func reverse32(dst, src []float32) {
+	if hasNEON && len(dst) >= 4 {
+		reverseNEON(dst, src)
+		return
+	}
+	reverse32Go(dst, src)
+}
+
+func addSub32(sumDst, diffDst, a, b []float32) {
+	if hasNEON && len(sumDst) >= 4 {
+		addSubNEON(sumDst, diffDst, a, b)
+		return
+	}
+	addSub32Go(sumDst, diffDst, a, b)
+}
+
+//go:noescape
+func reverseNEON(dst, src []float32)
+
+//go:noescape
+func addSubNEON(sumDst, diffDst, a, b []float32)

@@ -704,3 +704,48 @@ func RealFFTUnpack(outRe, outIm, zRe, zIm, twRe, twIm []float32) {
 	}
 	realFFTUnpack32(outRe, outIm, zRe, zIm, twRe, twIm, n)
 }
+
+// Reverse reverses a slice: dst[i] = src[len(src)-1-i].
+//
+// Processes min(len(dst), len(src)) elements. The result is stored
+// starting at dst[0].
+//
+// This operation is useful for:
+//   - Real FFT unpacking (reversing the mirrored half)
+//   - Signal processing algorithms requiring time reversal
+//   - General array manipulation
+//
+// In-place operation (dst == src) is supported.
+//
+// Uses AVX on AMD64 (8x float32), NEON on ARM64 (4x float32), with pure Go fallback.
+func Reverse(dst, src []float32) {
+	n := min(len(dst), len(src))
+	if n == 0 {
+		return
+	}
+	reverse32(dst[:n], src[:n])
+}
+
+// AddSub computes element-wise sum and difference simultaneously:
+//
+//	sumDst[i] = a[i] + b[i]
+//	diffDst[i] = a[i] - b[i]
+//
+// This fused operation loads a and b only once, improving cache efficiency
+// compared to calling Add and Sub separately.
+//
+// Processes min(len(sumDst), len(diffDst), len(a), len(b)) elements.
+//
+// Uses AVX on AMD64 (8x float32), NEON on ARM64 (4x float32), with pure Go fallback.
+func AddSub(sumDst, diffDst, a, b []float32) {
+	n := minLen4(len(sumDst), len(diffDst), len(a), len(b))
+	if n == 0 {
+		return
+	}
+	addSub32(sumDst[:n], diffDst[:n], a[:n], b[:n])
+}
+
+// minLen4 returns the minimum of four lengths.
+func minLen4(a, b, c, d int) int {
+	return min(min(a, b), min(c, d))
+}

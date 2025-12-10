@@ -3981,3 +3981,181 @@ realfft_scalar:
 realfft_done:
     VZEROUPPER
     RET
+
+// ============================================================================
+// REVERSE - REVERSE SLICE ELEMENTS
+// ============================================================================
+
+// func reverseAVX(dst, src []float32)
+// Reverses elements: dst[i] = src[len-1-i]
+// Frame: dst(24) + src(24) = 48 bytes
+TEXT ·reverseAVX(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), DX        // DX = dst pointer
+    MOVQ dst_len+8(FP), CX         // CX = length
+    MOVQ src_base+24(FP), SI       // SI = src pointer
+
+    // Check for in-place reversal (not supported in SIMD path)
+    CMPQ DX, SI
+    JE   reverse_inplace
+
+    // Calculate src end pointer: SI + (n-8)*4 (points to last full block)
+    MOVQ CX, AX
+    SUBQ $8, AX                    // AX = n - 8
+    SHLQ $2, AX                    // AX = (n-8) * 4
+    ADDQ SI, AX                    // AX = &src[n-8]
+    MOVQ AX, R8                    // R8 = reverse src pointer
+
+    // Process 8 elements per iteration (from end of src to beginning of dst)
+    MOVQ CX, AX
+    SHRQ $3, AX                    // AX = n / 8
+    JZ   reverse_remainder
+
+reverse_loop8:
+    // Load 8 elements from reverse position
+    VMOVUPS (R8), Y0               // Y0 = src[n-8:n]
+
+    // Reverse order: swap 128-bit lanes then reverse within lanes
+    VPERM2F128 $0x01, Y0, Y0, Y0   // Swap high/low 128-bit lanes
+    VPERMILPS $0x1B, Y0, Y0        // Reverse within each lane: [3,2,1,0]
+
+    // Store to forward position
+    VMOVUPS Y0, (DX)
+
+    ADDQ $32, DX                   // dst += 8
+    SUBQ $32, R8                   // src_rev -= 8
+    DECQ AX
+    JNZ  reverse_loop8
+
+reverse_remainder:
+    ANDQ $7, CX
+    JZ   reverse_done
+
+    // Handle remaining elements
+    // Calculate remaining src position
+    MOVQ dst_len+8(FP), AX         // AX = original length
+    SHRQ $3, AX
+    SHLQ $3, AX                    // AX = processed count
+    MOVQ dst_len+8(FP), R9         // R9 = n
+    SUBQ AX, R9                    // R9 = remaining count
+    DECQ R9                        // R9 = n - processed - 1
+
+reverse_scalar:
+    // Get src[n-1-i] where i is current dst index
+    MOVQ dst_len+8(FP), R10
+    SHRQ $3, R10
+    SHLQ $3, R10                   // R10 = processed count
+    ADDQ R10, R9                   // Adjust for processed
+    MOVQ dst_len+8(FP), R10
+    DECQ R10                       // R10 = n - 1
+    SUBQ R9, R10                   // R10 = n - 1 - (processed + remaining_idx)
+
+    // Actually, let's just do a simple scalar loop
+    MOVQ src_base+24(FP), SI
+    MOVQ dst_len+8(FP), AX
+    SHRQ $3, AX
+    SHLQ $3, AX                    // AX = starting dst index
+    MOVQ dst_len+8(FP), R10
+    DECQ R10                       // R10 = n - 1
+
+reverse_scalar_loop:
+    MOVQ R10, R11
+    SUBQ AX, R11                   // R11 = n - 1 - i (src index)
+    SHLQ $2, R11
+    ADDQ SI, R11                   // R11 = &src[n-1-i]
+    VMOVSS (R11), X0
+    VMOVSS X0, (DX)
+
+    ADDQ $4, DX
+    INCQ AX
+    DECQ CX
+    JNZ  reverse_scalar_loop
+    JMP  reverse_done
+
+reverse_inplace:
+    // In-place reversal: swap from both ends toward middle
+    // SI = start, calculate end pointer
+    MOVQ CX, AX
+    DECQ AX
+    SHLQ $2, AX
+    ADDQ SI, AX                    // AX = &src[n-1]
+
+    SHRQ $1, CX                    // CX = n / 2 swaps needed
+    JZ   reverse_done
+
+reverse_inplace_loop:
+    VMOVSS (SI), X0                // X0 = front element
+    VMOVSS (AX), X1                // X1 = back element
+    VMOVSS X1, (SI)                // store back to front
+    VMOVSS X0, (AX)                // store front to back
+    ADDQ $4, SI
+    SUBQ $4, AX
+    DECQ CX
+    JNZ  reverse_inplace_loop
+
+reverse_done:
+    VZEROUPPER
+    RET
+
+// ============================================================================
+// ADD-SUB - FUSED SUM AND DIFFERENCE
+// ============================================================================
+
+// func addSubAVX(sumDst, diffDst, a, b []float32)
+// Computes element-wise sum and difference:
+//   sumDst[i] = a[i] + b[i]
+//   diffDst[i] = a[i] - b[i]
+// Frame: sumDst(24) + diffDst(24) + a(24) + b(24) = 96 bytes
+TEXT ·addSubAVX(SB), NOSPLIT, $0-96
+    MOVQ sumDst_base+0(FP), DX     // DX = sumDst pointer
+    MOVQ sumDst_len+8(FP), CX      // CX = length
+    MOVQ diffDst_base+24(FP), R8   // R8 = diffDst pointer
+    MOVQ a_base+48(FP), SI         // SI = a pointer
+    MOVQ b_base+72(FP), DI         // DI = b pointer
+
+    // Process 8 elements per iteration
+    MOVQ CX, AX
+    SHRQ $3, AX
+    JZ   addsub_remainder
+
+addsub_loop8:
+    // Load inputs
+    VMOVUPS (SI), Y0               // Y0 = a[0:8]
+    VMOVUPS (DI), Y1               // Y1 = b[0:8]
+
+    // Compute sum and diff
+    VADDPS Y0, Y1, Y2              // Y2 = a + b (sum)
+    VSUBPS Y1, Y0, Y3              // Y3 = a - b (diff)
+
+    // Store results
+    VMOVUPS Y2, (DX)               // sumDst[0:8]
+    VMOVUPS Y3, (R8)               // diffDst[0:8]
+
+    ADDQ $32, SI
+    ADDQ $32, DI
+    ADDQ $32, DX
+    ADDQ $32, R8
+    DECQ AX
+    JNZ  addsub_loop8
+
+addsub_remainder:
+    ANDQ $7, CX
+    JZ   addsub_done
+
+addsub_scalar:
+    VMOVSS (SI), X0                // X0 = a
+    VMOVSS (DI), X1                // X1 = b
+    VADDSS X0, X1, X2              // X2 = a + b
+    VSUBSS X1, X0, X3              // X3 = a - b
+    VMOVSS X2, (DX)
+    VMOVSS X3, (R8)
+
+    ADDQ $4, SI
+    ADDQ $4, DI
+    ADDQ $4, DX
+    ADDQ $4, R8
+    DECQ CX
+    JNZ  addsub_scalar
+
+addsub_done:
+    VZEROUPPER
+    RET

@@ -2974,3 +2974,262 @@ func BenchmarkRealFFTUnpack(b *testing.B) {
 		})
 	}
 }
+
+// ============================================================================
+// REVERSE TESTS
+// ============================================================================
+
+func TestReverse(t *testing.T) {
+	sizes := []int{1, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 100, 128, 256}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			src := make([]float32, n)
+			dst := make([]float32, n)
+			expected := make([]float32, n)
+
+			// Initialize src with distinct values
+			for i := range n {
+				src[i] = float32(i + 1)
+			}
+
+			// Calculate expected (manual reverse)
+			for i := range n {
+				expected[i] = src[n-1-i]
+			}
+
+			Reverse(dst, src)
+
+			for i := range n {
+				if dst[i] != expected[i] {
+					t.Errorf("dst[%d] = %v, want %v", i, dst[i], expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestReverse_InPlace(t *testing.T) {
+	sizes := []int{1, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			data := make([]float32, n)
+			expected := make([]float32, n)
+
+			// Initialize with distinct values
+			for i := range n {
+				data[i] = float32(i + 1)
+				expected[i] = float32(n - i)
+			}
+
+			// In-place reverse
+			Reverse(data, data)
+
+			for i := range n {
+				if data[i] != expected[i] {
+					t.Errorf("data[%d] = %v, want %v", i, data[i], expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestReverse_GoVsSIMD(t *testing.T) {
+	sizes := []int{8, 9, 16, 17, 32, 64, 100, 128, 256}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			src := make([]float32, n)
+			dstSIMD := make([]float32, n)
+			dstGo := make([]float32, n)
+
+			// Initialize with values
+			for i := range n {
+				src[i] = float32(i)*1.5 + 0.5
+			}
+
+			// Run both
+			Reverse(dstSIMD, src)
+			reverse32Go(dstGo, src)
+
+			for i := range n {
+				if dstSIMD[i] != dstGo[i] {
+					t.Errorf("i=%d: SIMD=%v, Go=%v", i, dstSIMD[i], dstGo[i])
+				}
+			}
+		})
+	}
+}
+
+func TestReverse_EdgeCases(t *testing.T) {
+	t.Run("empty", func(_ *testing.T) {
+		Reverse(nil, nil)
+		Reverse([]float32{}, []float32{})
+	})
+
+	t.Run("single", func(t *testing.T) {
+		src := []float32{42}
+		dst := []float32{0}
+		Reverse(dst, src)
+		if dst[0] != 42 {
+			t.Errorf("got %v, want 42", dst[0])
+		}
+	})
+}
+
+func BenchmarkReverse(b *testing.B) {
+	sizes := []int{16, 64, 128, 256, 512, 1024, 4096}
+
+	for _, n := range sizes {
+		src := make([]float32, n)
+		dst := make([]float32, n)
+		for i := range n {
+			src[i] = float32(i)
+		}
+
+		b.Run(fmt.Sprintf("SIMD_%d", n), func(b *testing.B) {
+			b.SetBytes(int64(n * 4))
+			for i := 0; i < b.N; i++ {
+				Reverse(dst, src)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Go_%d", n), func(b *testing.B) {
+			b.SetBytes(int64(n * 4))
+			for i := 0; i < b.N; i++ {
+				reverse32Go(dst, src)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// ADD-SUB TESTS
+// ============================================================================
+
+func TestAddSub(t *testing.T) {
+	sizes := []int{1, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 100, 128, 256}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			a := make([]float32, n)
+			b := make([]float32, n)
+			sumDst := make([]float32, n)
+			diffDst := make([]float32, n)
+
+			// Initialize
+			for i := range n {
+				a[i] = float32(i) * 2.5
+				b[i] = float32(i) * 1.5
+			}
+
+			AddSub(sumDst, diffDst, a, b)
+
+			for i := range n {
+				expectedSum := a[i] + b[i]
+				expectedDiff := a[i] - b[i]
+				if sumDst[i] != expectedSum {
+					t.Errorf("sumDst[%d] = %v, want %v", i, sumDst[i], expectedSum)
+				}
+				if diffDst[i] != expectedDiff {
+					t.Errorf("diffDst[%d] = %v, want %v", i, diffDst[i], expectedDiff)
+				}
+			}
+		})
+	}
+}
+
+func TestAddSub_GoVsSIMD(t *testing.T) {
+	sizes := []int{8, 9, 16, 17, 32, 64, 100, 128, 256}
+
+	for _, n := range sizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			a := make([]float32, n)
+			b := make([]float32, n)
+			sumSIMD := make([]float32, n)
+			diffSIMD := make([]float32, n)
+			sumGo := make([]float32, n)
+			diffGo := make([]float32, n)
+
+			// Initialize with varying values
+			for i := range n {
+				a[i] = float32(math.Sin(float64(i)*0.7)) * 100
+				b[i] = float32(math.Cos(float64(i)*0.9)) * 100
+			}
+
+			// Run both
+			AddSub(sumSIMD, diffSIMD, a, b)
+			addSub32Go(sumGo, diffGo, a, b)
+
+			for i := range n {
+				if math.Abs(float64(sumSIMD[i]-sumGo[i])) > 1e-5 {
+					t.Errorf("i=%d sum: SIMD=%v, Go=%v", i, sumSIMD[i], sumGo[i])
+				}
+				if math.Abs(float64(diffSIMD[i]-diffGo[i])) > 1e-5 {
+					t.Errorf("i=%d diff: SIMD=%v, Go=%v", i, diffSIMD[i], diffGo[i])
+				}
+			}
+		})
+	}
+}
+
+func TestAddSub_EdgeCases(t *testing.T) {
+	t.Run("empty", func(_ *testing.T) {
+		AddSub(nil, nil, nil, nil)
+		AddSub([]float32{}, []float32{}, []float32{}, []float32{})
+	})
+
+	t.Run("single", func(t *testing.T) {
+		a := []float32{10}
+		b := []float32{3}
+		sum := []float32{0}
+		diff := []float32{0}
+		AddSub(sum, diff, a, b)
+		if sum[0] != 13 {
+			t.Errorf("sum got %v, want 13", sum[0])
+		}
+		if diff[0] != 7 {
+			t.Errorf("diff got %v, want 7", diff[0])
+		}
+	})
+}
+
+func BenchmarkAddSub(b *testing.B) {
+	sizes := []int{16, 64, 128, 256, 512, 1024, 4096}
+
+	for _, n := range sizes {
+		a := make([]float32, n)
+		bb := make([]float32, n)
+		sum := make([]float32, n)
+		diff := make([]float32, n)
+
+		for i := range n {
+			a[i] = float32(i) * 1.5
+			bb[i] = float32(i) * 0.5
+		}
+
+		b.Run(fmt.Sprintf("SIMD_%d", n), func(b *testing.B) {
+			b.SetBytes(int64(n * 4 * 4)) // 2 inputs + 2 outputs
+			for i := 0; i < b.N; i++ {
+				AddSub(sum, diff, a, bb)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Go_%d", n), func(b *testing.B) {
+			b.SetBytes(int64(n * 4 * 4))
+			for i := 0; i < b.N; i++ {
+				addSub32Go(sum, diff, a, bb)
+			}
+		})
+
+		// Compare against separate Add + Sub
+		b.Run(fmt.Sprintf("Separate_%d", n), func(b *testing.B) {
+			b.SetBytes(int64(n * 4 * 4))
+			for i := 0; i < b.N; i++ {
+				Add(sum, a, bb)
+				Sub(diff, a, bb)
+			}
+		})
+	}
+}
