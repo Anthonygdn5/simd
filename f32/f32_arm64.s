@@ -2044,3 +2044,150 @@ realfft_neon_scalar:
 
 realfft_neon_done:
     RET
+
+// ============================================================================
+// REVERSE - REVERSE SLICE ELEMENTS
+// ============================================================================
+
+// func reverseNEON(dst, src []float32)
+// Reverses elements: dst[i] = src[len-1-i]
+// Frame: dst(24) + src(24) = 48 bytes
+TEXT ·reverseNEON(SB), NOSPLIT, $0-48
+    MOVD dst_base+0(FP), R0        // R0 = dst pointer
+    MOVD dst_len+8(FP), R1         // R1 = length
+    MOVD src_base+24(FP), R2       // R2 = src pointer
+
+    // Check for in-place reversal
+    CMP R0, R2
+    BEQ reverse_neon_inplace
+
+    // Calculate src end pointer: R2 + (n-4)*4 (points to last full block)
+    SUB $4, R1, R3                 // R3 = n - 4
+    LSL $2, R3                     // R3 = (n-4) * 4
+    ADD R2, R3                     // R3 = &src[n-4]
+
+    // Process 4 elements per iteration
+    LSR $2, R1, R4                 // R4 = n / 4
+    CBZ R4, reverse_neon_remainder
+
+reverse_neon_loop4:
+    // Load 4 elements from reverse position
+    VLD1 (R3), [V0.S4]             // V0 = src[n-4:n]
+
+    // Reverse order within 4S register:
+    // Step 1: REV64 reverses pairs within 64-bit elements: [0,1,2,3] -> [1,0,3,2]
+    WORD $0x4EA00800               // REV64 V0.4S, V0.4S
+
+    // Step 2: EXT swaps high/low 64-bits: [1,0,3,2] -> [3,2,1,0]
+    WORD $0x6E004000               // EXT V0.16B, V0.16B, V0.16B, #8
+
+    // Store to forward position
+    VST1.P [V0.S4], 16(R0)         // dst += 4
+
+    SUB $16, R3                    // src_rev -= 4
+    SUB $1, R4
+    CBNZ R4, reverse_neon_loop4
+
+reverse_neon_remainder:
+    AND $3, R1, R4                 // R4 = remainder count
+    CBZ R4, reverse_neon_done
+
+    // Handle remaining elements
+    MOVD dst_len+8(FP), R5         // R5 = original length
+    LSR $2, R5                     // R5 = n / 4
+    LSL $2, R5                     // R5 = processed count (4 * (n/4))
+    MOVD dst_len+8(FP), R6         // R6 = n
+    SUB $1, R6                     // R6 = n - 1
+
+reverse_neon_scalar:
+    // Calculate src index: n - 1 - current_dst_idx
+    SUB R5, R6, R7                 // R7 = n - 1 - processed
+    LSL $2, R7                     // R7 = byte offset
+    ADD R2, R7                     // R7 = &src[n-1-i]
+    FMOVS (R7), F0                 // F0 = src[n-1-i]
+    FMOVS F0, (R0)
+    ADD $4, R0                     // dst++
+    ADD $1, R5                     // processed++
+    SUB $1, R4
+    CBNZ R4, reverse_neon_scalar
+    B reverse_neon_done
+
+reverse_neon_inplace:
+    // In-place reversal: swap from both ends toward middle
+    SUB $1, R1, R3
+    LSL $2, R3
+    ADD R2, R3                     // R3 = &src[n-1]
+
+    LSR $1, R1, R4                 // R4 = n / 2 swaps needed
+    CBZ R4, reverse_neon_done
+
+reverse_neon_inplace_loop:
+    FMOVS (R2), F0                 // F0 = front element
+    FMOVS (R3), F1                 // F1 = back element
+    FMOVS F1, (R2)                 // store back to front
+    FMOVS F0, (R3)                 // store front to back
+    ADD $4, R2
+    SUB $4, R3
+    SUB $1, R4
+    CBNZ R4, reverse_neon_inplace_loop
+
+reverse_neon_done:
+    RET
+
+// ============================================================================
+// ADD-SUB - FUSED SUM AND DIFFERENCE
+// ============================================================================
+
+// func addSubNEON(sumDst, diffDst, a, b []float32)
+// Computes element-wise sum and difference:
+//   sumDst[i] = a[i] + b[i]
+//   diffDst[i] = a[i] - b[i]
+// Frame: sumDst(24) + diffDst(24) + a(24) + b(24) = 96 bytes
+TEXT ·addSubNEON(SB), NOSPLIT, $0-96
+    MOVD sumDst_base+0(FP), R0     // R0 = sumDst pointer
+    MOVD sumDst_len+8(FP), R1      // R1 = length
+    MOVD diffDst_base+24(FP), R2   // R2 = diffDst pointer
+    MOVD a_base+48(FP), R3         // R3 = a pointer
+    MOVD b_base+72(FP), R4         // R4 = b pointer
+
+    // Process 4 elements per iteration
+    LSR $2, R1, R5                 // R5 = n / 4
+    CBZ R5, addsub_neon_remainder
+
+addsub_neon_loop4:
+    // Load inputs
+    VLD1.P 16(R3), [V0.S4]         // V0 = a[0:4]
+    VLD1.P 16(R4), [V1.S4]         // V1 = b[0:4]
+
+    // Compute sum and diff
+    WORD $0x4E21D402               // FADD V2.4S, V0.4S, V1.4S  (sum)
+    WORD $0x4EA1D403               // FSUB V3.4S, V0.4S, V1.4S  (diff)
+
+    // Store results
+    VST1.P [V2.S4], 16(R0)         // sumDst
+    VST1.P [V3.S4], 16(R2)         // diffDst
+
+    SUB $1, R5
+    CBNZ R5, addsub_neon_loop4
+
+addsub_neon_remainder:
+    AND $3, R1, R5                 // R5 = remainder count
+    CBZ R5, addsub_neon_done
+
+addsub_neon_scalar:
+    FMOVS (R3), F0                 // F0 = a
+    FMOVS (R4), F1                 // F1 = b
+    FADDS F0, F1, F2               // F2 = a + b
+    FSUBS F1, F0, F3               // F3 = a - b
+    FMOVS F2, (R0)
+    FMOVS F3, (R2)
+
+    ADD $4, R3
+    ADD $4, R4
+    ADD $4, R0
+    ADD $4, R2
+    SUB $1, R5
+    CBNZ R5, addsub_neon_scalar
+
+addsub_neon_done:
+    RET

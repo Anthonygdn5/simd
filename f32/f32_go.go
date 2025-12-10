@@ -478,3 +478,56 @@ func realFFTUnpack32Go(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int) {
 		outIm[k] = evenIm + oddIm
 	}
 }
+
+// reverse32Go reverses a slice in pure Go.
+// dst[i] = src[n-1-i] for i in [0, n)
+func reverse32Go(dst, src []float32) {
+	n := len(src)
+	// Check for in-place operation
+	if &dst[0] == &src[0] {
+		// In-place reversal: swap elements from both ends
+		for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
+			dst[i], dst[j] = dst[j], dst[i]
+		}
+		return
+	}
+	// Out-of-place: copy in reverse order
+	// Process 4 elements at a time for better performance
+	i := 0
+	for ; i+3 < n; i += 4 {
+		j := n - 1 - i
+		dst[i] = src[j]
+		dst[i+1] = src[j-1]
+		dst[i+2] = src[j-2]
+		dst[i+3] = src[j-3]
+	}
+	// Handle remainder
+	for ; i < n; i++ {
+		dst[i] = src[n-1-i]
+	}
+}
+
+// addSub32Go computes element-wise sum and difference in pure Go.
+// sumDst[i] = a[i] + b[i], diffDst[i] = a[i] - b[i]
+func addSub32Go(sumDst, diffDst, a, b []float32) {
+	n := len(a)
+	// Process 4 elements at a time for better performance
+	i := 0
+	for ; i+3 < n; i += 4 {
+		a0, a1, a2, a3 := a[i], a[i+1], a[i+2], a[i+3]
+		b0, b1, b2, b3 := b[i], b[i+1], b[i+2], b[i+3]
+		sumDst[i] = a0 + b0
+		sumDst[i+1] = a1 + b1
+		sumDst[i+2] = a2 + b2
+		sumDst[i+3] = a3 + b3
+		diffDst[i] = a0 - b0
+		diffDst[i+1] = a1 - b1
+		diffDst[i+2] = a2 - b2
+		diffDst[i+3] = a3 - b3
+	}
+	// Handle remainder
+	for ; i < n; i++ {
+		sumDst[i] = a[i] + b[i]
+		diffDst[i] = a[i] - b[i]
+	}
+}

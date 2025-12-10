@@ -143,6 +143,8 @@ Same API as `f64` but for `float32` with wider SIMD:
 |            | `AbsSqComplex(dst,aRe,aIm)`           | Magnitude squared                  | 8x / 4x          |
 |            | `ButterflyComplex(uRe,uIm,lRe,lIm,twRe,twIm)` | FFT butterfly with twiddle | 8x / 4x          |
 |            | `RealFFTUnpack(outRe,outIm,zRe,zIm,twRe,twIm)` | Real FFT unpack step     | 8x / 4x          |
+| **Utility**| `Reverse(dst, src)`                   | Reverse slice order                | 8x / 4x          |
+|            | `AddSub(sum, diff, a, b)`             | Fused sum and difference           | 8x / 4x          |
 
 ### `f16` - float16 (Half-Precision) Operations
 

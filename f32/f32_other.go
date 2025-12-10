@@ -60,3 +60,5 @@ func butterflyComplex32(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float32
 func realFFTUnpack32(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int) {
 	realFFTUnpack32Go(outRe, outIm, zRe, zIm, twRe, twIm, n)
 }
+func reverse32(dst, src []float32)             { reverse32Go(dst, src) }
+func addSub32(sumDst, diffDst, a, b []float32) { addSub32Go(sumDst, diffDst, a, b) }

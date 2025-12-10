@@ -616,3 +616,27 @@ func butterflyComplexAVX(upperRe, upperIm, lowerRe, lowerIm, twRe, twIm []float3
 
 //go:noescape
 func realFFTUnpackAVX(outRe, outIm, zRe, zIm, twRe, twIm []float32, n int)
+
+func reverse32(dst, src []float32) {
+	// Use AVX if available and have enough elements
+	if cpu.X86.AVX && len(dst) >= minAVXElements {
+		reverseAVX(dst, src)
+		return
+	}
+	reverse32Go(dst, src)
+}
+
+func addSub32(sumDst, diffDst, a, b []float32) {
+	// Use AVX if available and have enough elements
+	if cpu.X86.AVX && len(sumDst) >= minAVXElements {
+		addSubAVX(sumDst, diffDst, a, b)
+		return
+	}
+	addSub32Go(sumDst, diffDst, a, b)
+}
+
+//go:noescape
+func reverseAVX(dst, src []float32)
+
+//go:noescape
+func addSubAVX(sumDst, diffDst, a, b []float32)
